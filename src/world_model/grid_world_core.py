@@ -3,7 +3,7 @@ from enum import Enum
 from dataclasses import dataclass
 
 
-class Direction(Enum):
+class Actions(Enum):
     STAY = 0
     LEFT = 1
     UP = 2
@@ -12,11 +12,11 @@ class Direction(Enum):
 
 
 _DELTAS = {
-    Direction.STAY: (0, 0),
-    Direction.LEFT: (-1, 0),
-    Direction.RIGHT: (1, 0),
-    Direction.UP: (0, 1),
-    Direction.DOWN: (0, -1),
+    Actions.STAY: (0, 0),
+    Actions.LEFT: (-1, 0),
+    Actions.RIGHT: (1, 0),
+    Actions.UP: (0, 1),
+    Actions.DOWN: (0, -1),
 }
 
 
@@ -25,7 +25,7 @@ class Pos:
     x: int
     y: int
 
-    def move(self, direction: Direction) -> Pos:
+    def move(self, direction: Actions) -> Pos:
         dx, dy = _DELTAS[direction]
         return Pos(self.x + dx, self.y + dy)
 
@@ -35,28 +35,45 @@ class GridWorldState:
     crates: tuple[Pos, ...]
     robots: tuple[Pos, ...]
     humans: tuple[Pos, ...]
+    time_step: int
 
 
 @dataclass(frozen=True)
-class GridWorld:
+class GridWorldCore:
     width: int
     height: int
     walls: frozenset[Pos]
+    goals: tuple[tuple[Pos, ...], ...]
+    max_steps: int
 
-    @staticmethod
-    def create(
-        width: int,
-        height: int,
-        walls: list[Pos],
-    ) -> GridWorld:
-        return GridWorld(width=width, height=height, walls=frozenset(walls))
+    def is_terminal(self, state: GridWorldState) -> bool:
+        return state.time_step >= self.max_steps
 
-    @staticmethod
-    def make_state(
-        crates: list[Pos], robots: list[Pos], humans: list[Pos]
+    def step(
+        self,
+        state: GridWorldState,
+        robot_actions: tuple[Actions, ...],
+        human_actions: tuple[Actions, ...],
     ) -> GridWorldState:
+        if self.is_terminal(state):
+            raise ValueError("Can't step a terminal state")
+
+        crates, robots, humans = state.crates, state.robots, state.humans
+        assert len(robot_actions) == len(robots)
+        assert len(human_actions) == len(humans)
+
+        for i in range(len(robots)):
+            crates, robots = self._try_move_robot(
+                i, robot_actions[i], crates, robots, humans
+            )
+        for i in range(len(humans)):
+            humans = self._try_move_human(i, human_actions[i], crates, robots, humans)
+
         return GridWorldState(
-            crates=tuple(crates), robots=tuple(robots), humans=tuple(humans)
+            crates=crates,
+            robots=robots,
+            humans=humans,
+            time_step=state.time_step + 1,
         )
 
     def _in_bounds(self, p: Pos) -> bool:
@@ -87,12 +104,12 @@ class GridWorld:
     def _try_move_robot(
         self,
         idx: int,
-        direction: Direction,
+        direction: Actions,
         crates: tuple[Pos, ...],
         robots: tuple[Pos, ...],
         humans: tuple[Pos, ...],
     ) -> tuple[tuple[Pos, ...], tuple[Pos, ...]]:
-        if direction == Direction.STAY:
+        if direction == Actions.STAY:
             return crates, robots
         dst = robots[idx].move(direction)
         crate_idx = self._crate_at(dst, crates)
@@ -110,33 +127,14 @@ class GridWorld:
     def _try_move_human(
         self,
         idx: int,
-        direction: Direction,
+        direction: Actions,
         crates: tuple[Pos, ...],
         robots: tuple[Pos, ...],
         humans: tuple[Pos, ...],
     ) -> tuple[Pos, ...]:
-        if direction == Direction.STAY:
+        if direction == Actions.STAY:
             return humans
         dst = humans[idx].move(direction)
         if self._is_free(dst, crates, robots, humans):
             return humans[:idx] + (dst,) + humans[idx + 1 :]
         return humans
-
-    def step(
-        self,
-        state: GridWorldState,
-        robot_actions: tuple[Direction, ...],
-        human_actions: tuple[Direction, ...],
-    ) -> GridWorldState:
-        crates, robots, humans = state.crates, state.robots, state.humans
-        assert len(robot_actions) == len(robots)
-        assert len(human_actions) == len(humans)
-
-        for i in range(len(robots)):
-            crates, robots = self._try_move_robot(
-                i, robot_actions[i], crates, robots, humans
-            )
-        for i in range(len(humans)):
-            humans = self._try_move_human(i, human_actions[i], crates, robots, humans)
-
-        return GridWorldState(crates=crates, robots=robots, humans=humans)

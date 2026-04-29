@@ -1,15 +1,15 @@
-from grid_world import GridWorld, Direction, Pos, GridWorldState
+from world_model.grid_world_core import GridWorld, Actions, Pos, GridWorldState
 from itertools import product
 from dataclasses import dataclass
 
 import random
 
 all_Directions = [
-    Direction.STAY,
-    Direction.UP,
-    Direction.DOWN,
-    Direction.LEFT,
-    Direction.RIGHT,
+    Actions.STAY,
+    Actions.UP,
+    Actions.DOWN,
+    Actions.LEFT,
+    Actions.RIGHT,
 ]
 
 
@@ -28,7 +28,7 @@ class GWEnvironment:
         self.goals = goals
 
     def step(
-        self, state: GWEnvState, action_r: Direction, actions_h: tuple[Direction, ...]
+        self, state: GWEnvState, action_r: Actions, actions_h: tuple[Actions, ...]
     ):
         if self.is_terminal(state):
             raise ValueError("Can't step a terminal state")
@@ -67,11 +67,11 @@ class BackwardInductionSolver:
         self.Q_r = {}
 
         self.all_Directions = [
-            Direction.STAY,
-            Direction.UP,
-            Direction.DOWN,
-            Direction.LEFT,
-            Direction.RIGHT,
+            Actions.STAY,
+            Actions.UP,
+            Actions.DOWN,
+            Actions.LEFT,
+            Actions.RIGHT,
         ]
 
     def compute_robot_policy(self, init_state: GWEnvState):

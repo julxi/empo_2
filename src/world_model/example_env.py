@@ -1,15 +1,31 @@
-import grid_world
-import world_model
+from grid_world_core import GridWorldCore, Actions, Pos, GridWorldState
+from grid_world_env import GridWorldEnv
+from solver import EmpoParameter, BackwardInductionSolver
 
-gw = grid_world.GridWorld(width=3, height=1, walls=frozenset())
-env = world_model.GWEnvironment(
-    gw,
-    max_steps=3,
-    goals=[[grid_world.Pos(1, 0)]],
+# params
+
+width = 3
+height = 1
+robot_pos = Pos(1, 0)
+humans_pos = (Pos(0, 0),)
+goals = ((Pos(1, 0),),)
+
+max_steps = 3
+
+# environment and solver setup
+gw_c = GridWorldCore(
+    width=width, height=height, walls=frozenset(), max_steps=max_steps, goals=goals
+)
+gw_env = GridWorldEnv(gw_c)
+gw_start_state = GridWorldState(
+    crates=(),
+    robots=(robot_pos,),
+    humans=humans_pos,
+    time_step=0,
 )
 
 
-empo_params = world_model.EmpoParameter(
+empo_params = EmpoParameter(
     gamma_r=1,
     beta_r=1,
     gamma_h=1,
@@ -17,30 +33,10 @@ empo_params = world_model.EmpoParameter(
     xi=1,
     eta=1,
 )
-
-solver = world_model.BackwardInductionSolver(env, empo_params)
+solver = BackwardInductionSolver(gw_env, empo_params)
 
 # solving
 
-gw_start_state = grid_world.GridWorldState(
-    crates=(),
-    robots=(grid_world.Pos(1, 0),),
-    humans=(grid_world.Pos(0, 0),),
-)
+robot_policy = solver.compute_robot_policy(gw_start_state)
 
-env_state = world_model.GWEnvState(
-    grid_world_state=gw_start_state,
-    time_step=0,
-)
-
-robot_policy = solver.compute_robot_policy(env_state)
-
-all_Directions = [
-    grid_world.Direction.STAY,
-    grid_world.Direction.UP,
-    grid_world.Direction.DOWN,
-    grid_world.Direction.LEFT,
-    grid_world.Direction.RIGHT,
-]
-for action in all_Directions:
-    print(action, robot_policy[env_state, action])
+print(robot_policy)
