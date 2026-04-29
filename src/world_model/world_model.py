@@ -133,9 +133,13 @@ class BackwardInductionSolver:
                     for human_actions in all_human_actions:
                         new_state = self.env.step(state, action, human_actions)
                         self.V_h[h_idx, state, goal] += (
-                            10 * self.env.goal_reward(new_state, h_idx, goal)
-                            + self.empo_params.gamma_h
-                            * self.V_h[h_idx, new_state, goal]
+                            self.robot_policy[state, action]
+                            / num_human_actions
+                            * (
+                                self.env.goal_reward(new_state, h_idx, goal)
+                                + self.empo_params.gamma_h
+                                * self.V_h[h_idx, new_state, goal]
+                            )
                         )
 
         # compute X_h

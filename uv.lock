@@ -19,8 +19,16 @@ dependencies = [
     { name = "pettingzoo" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pykernel" },
+]
+
 [package.metadata]
 requires-dist = [{ name = "pettingzoo", specifier = ">=1.25.0" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pykernel", specifier = ">=0.1.6" }]
 
 [[package]]
 name = "farama-notifications"
@@ -86,6 +94,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/38/cb/cbb8d0e973b284f709ce93a80354d464588301957220f031c51324b464b2/pettingzoo-1.25.0.tar.gz", hash = "sha256:4b8a8552eab07a9c8f37dca094e59ee194003c57e2a7e7348bdf7c62049eecf6", size = 723959, upload-time = "2025-04-22T14:37:37.36Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d3/9a/33fb244264573687ef27b2f436ae98b524c5e8e5edc7c36183a59c5b4748/pettingzoo-1.25.0-py3-none-any.whl", hash = "sha256:f385bccbebdad73a0c3da884344aea6e2614aa962b653c790b06ef9ab162d651", size = 852489, upload-time = "2025-04-22T14:37:36.036Z" },
+]
+
+[[package]]
+name = "pykernel"
+version = "0.1.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/96/8efc4b1393ef360bda5145e17201ed8fe1c2ef5cd5fd7b76bc0fe34a4ecb/pykernel-0.1.6.tar.gz", hash = "sha256:c7030dac432a893ae8a1662e34a68d8d8c0e5957b1c1a88a174a000e96a799c8", size = 15201, upload-time = "2022-05-25T02:21:08.72Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/40/b6549f0482739675cac5ce22f2b99dea82f8b6882060598003ffa076f110/pykernel-0.1.6-py3-none-any.whl", hash = "sha256:3657258809cf2394ec1d622b7155d6ebe27efbfc2065056d3d7ce96b97645bcc", size = 16401, upload-time = "2022-05-25T02:21:06.72Z" },
 ]
 
 [[package]]

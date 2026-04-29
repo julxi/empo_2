@@ -10,9 +10,9 @@ env = world_model.GWEnvironment(
 
 
 empo_params = world_model.EmpoParameter(
-    gamma_r=0.5,
+    gamma_r=1,
     beta_r=1,
-    gamma_h=0.5,
+    gamma_h=1,
     zeta=1,
     xi=1,
     eta=1,
