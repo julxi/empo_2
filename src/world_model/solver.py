@@ -35,7 +35,7 @@ class BackwardInductionSolver:
             n_h = self.env.num_humans(state)
             for h_idx in range(n_h):
                 for goal in self.env.goals(h_idx):
-                    self.V_h[h_idx, state, goal] = 1  # surviving?
+                    self.V_h[h_idx, state, goal] = 0.001  # surviving?
             self.V_r[state] = -1e-3  # why small negative? # add goal here as well?
             return
 
@@ -43,22 +43,22 @@ class BackwardInductionSolver:
         distributions = {a: self.env.step(state, a) for a in actions}
 
         for action in actions:
-            for next_state in distributions[action]:
+            for next_state in distributions[action][0]:
                 self._rec_compute_policy(next_state)
 
         # (4*) Q_r
         for action in actions:
             self.Q_r[state, action] = 0.0
-            for next_state, prob in distributions[action].items():
+            for next_state, prob in zip(*distributions[action]):
                 self.Q_r[state, action] += (
                     prob * self.params.gamma_r * self.V_r[next_state]
                 )
 
-        # (5) robot policy: pi(a) = -Q_r(a) / sum(-Q_r) (preserves existing math)
+        # (5) robot policy
         for action in actions:
-            self.robot_policy[state, action] = (
-                -self.Q_r[state, action]
-            ) ** self.params.beta_r
+            self.robot_policy[state, action] = (-self.Q_r[state, action]) ** (
+                -self.params.beta_r
+            )
         total = sum(self.robot_policy[state, a] for a in actions)
         for action in actions:
             self.robot_policy[state, action] /= total
@@ -69,7 +69,7 @@ class BackwardInductionSolver:
             for goal in self.env.goals(h_idx):
                 acc = 0.0
                 for action in actions:
-                    for next_state, prob in distributions[action].items():
+                    for next_state, prob in zip(*distributions[action]):
                         weight = prob * self.robot_policy[state, action]
                         reward = (
                             1 if self.env.human_at_goal(next_state, h_idx, goal) else 0

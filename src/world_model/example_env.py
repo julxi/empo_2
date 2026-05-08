@@ -1,6 +1,6 @@
-from grid_world_core import GridWorldCore, Actions, Pos, GridWorldState
-from grid_world_env import GridWorldEnv
-from solver import EmpoParameter, BackwardInductionSolver
+from .grid_world_core import GridWorldCore, Actions, Pos, GridWorldState
+from .grid_world_env import GridWorldEnv
+from .solver import EmpoParameter, BackwardInductionSolver
 
 # params
 

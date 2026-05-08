@@ -1,6 +1,6 @@
 from itertools import product
 
-from grid_world_core import Actions, GridWorldCore, GridWorldState, Pos
+from .grid_world_core import Actions, GridWorldCore, GridWorldState, Pos
 
 _ALL_DIRECTIONS: tuple[Actions, ...] = (
     Actions.STAY,
@@ -30,12 +30,6 @@ class GridWorldEnv:
     def num_humans(self, state: GridWorldState) -> int:
         return len(state.humans)
 
-    def num_human_action_tuples(self, state: GridWorldState) -> int:
-        # Used by the solver to preserve the existing un-normalized V_h sum
-        # (which iterates over every (robot_action, human_action) joint pair).
-        # Will become unnecessary once the V_h math is fixed in a follow-up.
-        return len(_ALL_DIRECTIONS) ** len(state.humans)
-
     def goals(self, h_idx: int) -> tuple[Pos, ...]:
         return self.core.goals[h_idx]
 
@@ -44,7 +38,7 @@ class GridWorldEnv:
 
     def step(
         self, state: GridWorldState, action: Actions
-    ) -> dict[GridWorldState, float]:
+    ) -> tuple[list[GridWorldState], list[float]]:
         assert len(state.robots) == 1, "GridWorldEnv requires exactly one robot"
 
         n_humans = len(state.humans)
@@ -55,4 +49,4 @@ class GridWorldEnv:
         for human_actions in human_action_tuples:
             new_state = self.core.step(state, (action,), human_actions)
             dist[new_state] = dist.get(new_state, 0.0) + prob
-        return dist
+        return list(dist.keys()), list(dist.values())
