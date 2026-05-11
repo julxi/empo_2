@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
+from typing import Any, Callable
 
-import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from gymnasium.experimental.functional import FuncEnv
@@ -35,12 +34,22 @@ class GridWorldState:
     box: tuple[int, int]
 
 
-class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, float, bool, Any, Any]):
+type Goal = Callable[[GridWorldState], float]
+type Population = list[list[Goal]]
+type Rewards = list[list[float]]
+
+
+class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, None]):
     size: int
 
-    def __init__(self, size: int = 5) -> None:
+    def __init__(
+        self,
+        size: int,
+        population: Population,
+    ) -> None:
         super().__init__()
         self.size = size
+        self.population = population
         coord = spaces.Box(0, size - 1, shape=(2,), dtype=np.int64)
         self.observation_space = spaces.Dict(
             {"agent": coord, "target": coord, "box": coord}
@@ -93,8 +102,13 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, float, bool, Any, Any])
         next_state: GridWorldState,
         rng: Any = None,
         params: Any = None,
-    ) -> float:
-        return 1.0 if next_state.agent == next_state.target else 0.0
+    ) -> Rewards:
+        if not self.terminal(next_state, rng, params):
+            return [[0.0] * len(human_goals) for human_goals in self.population]
+        return [
+            [goal(next_state) for goal in human_goals]
+            for human_goals in self.population
+        ]
 
     def terminal(
         self, state: GridWorldState, rng: Any = None, params: Any = None
