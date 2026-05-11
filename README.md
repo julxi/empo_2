@@ -55,11 +55,10 @@ Comments:
 - For $\beta_r = \infty$ we recover greedy action selection:
 $$\pi_r(s) = \arg\max_{a_r} Q_r(s,a_r)$$
 
-### Simplified case: Just greedy Robot, One goal, Deterministic Environment
+### Simplified case: Just greedy Robot, Deterministic Environment
 
-- Just robot, no human agents. Simplifies MARL to RL.
+- Just robot, no human agency. Simplifies MARL to RL.
 - Greedy robot: deterministic policy $\pi_r(s)$
-- one goal, i.e., only one human (without agency) and with one goal $g$. Let $U(s) = [s \in g]$
 - deterministic environment: transition function $t(s,a)$
 - ⇒ everything is deterministic; the equations simplify
 
@@ -69,17 +68,37 @@ $$
 Q_r(s,a_r) \gets \gamma_r V_r(t(s,a_r))
 $$
 $$
-\pi_r(s) = \arg\max_{a_r} Q_r(s,a_r)
+\pi_r(s) \gets \arg\max_{a_r} Q_r(s,a_r)
 $$
 $$
-V_h(s) \gets U(t(s,\pi_r(s))) + \gamma_h V_h(t(s,\pi_r(s)))
+V_h(s, g_h) \gets U_h\big(t(s,\pi_r(s)),g_h\big) + \gamma_h V_h\big(t(s,\pi_r(s)),g_h\big)
 $$
 $$
-U_r(s) \gets - V_h(s)^{-\xi_s}
+X_h(s) \gets \sum_{g_h \in \mathcal{G}_h} V_h(s,g_h)^\zeta
+$$
+$$
+U_r(s) \gets -\Big( \sum_h X_h(s)^{-\xi} \Big)^\eta
 $$
 $$
 V_r(s) \gets U_r(s) + \max_{a_r} Q_r(s,a_r)
 $$
 
+#### Scaling Humans
 
-Note: $\xi_s = \zeta\,\xi\,\eta$, the product of $\zeta$, $\xi$, $\eta$ from the original equations.
+How can we scale $U_h$ to simulate multiple humans $m$ with isomorphic goals?
+
+We have $h_1,\dots,h_m$ with $V_{h_i}(s,g_{h_i}) = V_{h_j}(s,g_{h_j})$.
+Then $X_{h_i} = X_{h_j}$ and 
+$$
+U_r(s) \gets -\Big( m \cdot X_{h_1}(s)^{-\xi} + \sum_{h \neq h_i} X_h(s)^{-\xi}\Big)^\eta
+$$
+This has the same effect as only having one human $h$ with the same goal structure and scaling their $U_h$ by $m^{-\frac{1}{\zeta \xi}}$. Which seems funny, as scaling $U$ down scales it up.
+
+#### Backwards induction
+
+If the environment is acyclic we can use backwards induction.
+Another case where we can use backwards induction is when:
+- all goals $g_h$ consist of terminal states
+- $\gamma_h = 1$
+
+In this case $U_r(s)$ only depends on the terminal state reached by the policy. So we can just do backwards induction on a spanning tree of the state space.
