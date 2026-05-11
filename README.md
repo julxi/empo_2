@@ -2,7 +2,7 @@
 
 ## Theory
 
-### Main Equations
+### Main equations
 
 The equations for phase 2 are supposed to find a policy for the robot $r$, based on a given world model that contains:
 - the set of all humans $\mathcal{H}$ (assumed to be immutable)
@@ -12,7 +12,7 @@ The equations for phase 2 are supposed to find a policy for the robot $r$, based
 
 Note: The theory is vague in how $g_h \sim \mathcal{G}_h$ has to be chosen. The idea is that the robot doesn't know and doesn't try to guess the humans' concrete goals but has a feasible idea of all possible goals. In vagueness lies safety?
 
-Besides that we have got some hyperparameters: $\gamma_r, \beta_r, \gamma_h, \zeta, \xi, \eta$, and $U(s,g_h) = [s \in g_h]$ is the indicator function.
+Besides that, we have the hyperparameters $\gamma_r, \beta_r, \gamma_h, \zeta, \xi, \eta$, and $U_h(s,g_h) = [s \in g_h]$ is the indicator function.
 
 So here are the equations for phase 2:
 
@@ -28,7 +28,7 @@ $$
 $$
 - Goal-fulfilment value:
 $$
-V_h(s,g_h) \gets \mathbb{E}_{a_r \sim \pi_r(s)} \mathbb{E}_{g_{-h}} \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} [U(s',g_h) + \gamma_h V_h(s', g_h)]
+V_h(s,g_h) \gets \mathbb{E}_{a_r \sim \pi_r(s)} \mathbb{E}_{g_{-h}} \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} [U_h(s',g_h) + \gamma_h V_h(s', g_h)]
 \tag{6}
 $$
 - Aggregation of human power:
@@ -49,13 +49,13 @@ $$
 
 Comments:
 - $g$ denotes the joint goal vector $(g_h)_{h \in \mathcal{H}}$, and $g_{-h}$ denotes the goals of all humans other than $h$.
-- If $g_h$ only contains mutually unreachable goals – i.e., there is no trajectory containing distinct $s,s' \in g_h$ – and we further assume $\gamma_h = 1$, then $V_h(s,g_h)$ is the probability that $g_h$ gets fulfilled.
-- To avoid problems calculating $U_r$ we have to make sure that the set of possible goals is so wide that in every state each human has at least one attainable goal. Then in the sum for $X_h(s)$ one of the $V_h(s,g_h) > 0$ and $X_h(s) > 0$.
-- $V_h \geq 0$, $X_h > 0$, $U_r < 0$, $V_r < 0$, $Q_r < 0$. And $V_r$ and $Q_r$ are "better" the closer they are to zero.
+- If $g_h$ only contains mutually unreachable states – i.e., there is no trajectory containing distinct $s,s' \in g_h$ – and we further assume $\gamma_h = 1$, then $V_h(s,g_h)$ is the probability that $g_h$ gets fulfilled.
+- To avoid problems calculating $U_r$ we have to make sure that the set of possible goals is so wide that in every state each human has at least one attainable goal. Then in the sum for $X_h(s)$, at least one $V_h(s,g_h)$ is positive, so $X_h(s) > 0$.
+- $V_h \geq 0$, $X_h > 0$, $U_r < 0$, $V_r < 0$, $Q_r < 0$ — and $V_r$, $Q_r$ are "better" the closer they are to zero.
 - For $\beta_r = \infty$ we recover greedy action selection:
 $$\pi_r(s) = \arg\max_{a_r} Q_r(s,a_r)$$
 
-### Simplified case: Just greedy Robot, Deterministic Environment
+### Simplified case: greedy robot, deterministic environment
 
 - Just robot, no human agency. Simplifies MARL to RL.
 - Greedy robot: deterministic policy $\pi_r(s)$
@@ -83,18 +83,28 @@ $$
 V_r(s) \gets U_r(s) + \max_{a_r} Q_r(s,a_r)
 $$
 
-#### Scaling Humans
+#### Compounding $U_r$ and pressure for shorter episodes
+
+Assume that $U_h$ is zero except for terminal states, and additionally that $\gamma_h = \gamma_r = 1$.
+
+Consider a solution and its trajectory of the deterministic policy from the starting state $s_0$.
+$V_h(s,g_h) = V_h(s_{T-1},g_h)$ for all $s$, where $s_{T-1}$ is the penultimate state (note that by the definition of $V_h$, $U_h$ gives a signal one step before the goal is reached). Since $V_h$ is constant, $X_h$ is also constant and then $U_r$ is also constant.
+So $V_r(s_0) = U_r(s_{T-1}) \cdot (T-1)$.
+
+Note that $U_r < 0$ and values closer to zero are better. Thus the policy prefers shorter episodes even at the expense of ultimate goal fulfilment.
+
+#### Scaling humans
 
 How can we scale $U_h$ to simulate multiple humans $m$ with isomorphic goals?
 
-We have $h_1,\dots,h_m$ with $V_{h_i}(s,g_{h_i}) = V_{h_j}(s,g_{h_j})$.
+We have $h_1,\dots,h_m$ with $V_{h_i}(s,g_{h_i}) = V_{h_j}(s,g_{h_j})$ for all $i, j$.
 Then $X_{h_i} = X_{h_j}$ and 
 $$
 U_r(s) \gets -\Big( m \cdot X_{h_1}(s)^{-\xi} + \sum_{h \neq h_i} X_h(s)^{-\xi}\Big)^\eta
 $$
-This has the same effect as only having one human $h$ with the same goal structure and scaling their $U_h$ by $m^{-\frac{1}{\zeta \xi}}$. Which seems funny, as scaling $U$ down scales it up.
+This has the same effect as only having one human $h$ with the same goal structure and scaling their $U_h$ by $m^{-\frac{1}{\zeta \xi}}$. Curiously, scaling $U_h$ down corresponds to scaling the magnitude of $U_r$ up.
 
-#### Backwards induction
+#### Backwards induction (maybe wrong)
 
 If the environment is acyclic we can use backwards induction.
 Another case where we can use backwards induction is when:
