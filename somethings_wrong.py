@@ -13,11 +13,12 @@ for i in range(size):
 population = [human]
 
 # env
-func_env = env.GridWorldFuncEnv(size, population)
+func_env = env.GridWorldFuncEnv(size, population, max_steps=2 * size)
 start_state = env.GridWorldState(
     agent=(4, 4),
     target=(3, 4),
     box=(2, 0),
+    step=0,
 )
 
 # solve
@@ -39,5 +40,6 @@ box_in_best_state = env.GridWorldState(
     agent=(4, 4),
     target=(3, 4),
     box=(0, 0),
+    step=0,
 )
 print("V_r also found by solver:", solver.V_r[box_in_best_state])

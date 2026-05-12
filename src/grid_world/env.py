@@ -32,6 +32,7 @@ class GridWorldState:
     agent: tuple[int, int]
     target: tuple[int, int]
     box: tuple[int, int]
+    step: int
 
 
 type Goal = Callable[[GridWorldState], float]
@@ -46,10 +47,12 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
         self,
         size: int,
         population: Population,
+        max_steps: int,
     ) -> None:
         super().__init__()
         self.size = size
         self.population = population
+        self.max_steps = max_steps
         coord = spaces.Box(0, size - 1, shape=(2,), dtype=np.int64)
         self.observation_space = spaces.Dict(
             {"agent": coord, "target": coord, "box": coord}
@@ -63,6 +66,7 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
             agent=(int(rows[0]), int(cols[0])),
             target=(int(rows[1]), int(cols[1])),
             box=(int(rows[2]), int(cols[2])),
+            step=0,
         )
 
     def _in_bounds(self, pos: tuple[int, int]) -> bool:
@@ -76,15 +80,36 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
         params: Any = None,
     ) -> GridWorldState:
         dx, dy = _DELTAS[Action(action)]
+        next_step = state.step + 1
         new_agent = (state.agent[0] + dx, state.agent[1] + dy)
         if not self._in_bounds(new_agent):
-            return state
+            return GridWorldState(
+                agent=state.agent,
+                target=state.target,
+                box=state.box,
+                step=next_step,
+            )
         if new_agent == state.box:
             new_box = (state.box[0] + dx, state.box[1] + dy)
             if not self._in_bounds(new_box):
-                return state
-            return GridWorldState(agent=new_agent, target=state.target, box=new_box)
-        return GridWorldState(agent=new_agent, target=state.target, box=state.box)
+                return GridWorldState(
+                    agent=state.agent,
+                    target=state.target,
+                    box=state.box,
+                    step=next_step,
+                )
+            return GridWorldState(
+                agent=new_agent,
+                target=state.target,
+                box=new_box,
+                step=next_step,
+            )
+        return GridWorldState(
+            agent=new_agent,
+            target=state.target,
+            box=state.box,
+            step=next_step,
+        )
 
     def observation(
         self, state: GridWorldState, rng: Any = None, params: Any = None
@@ -113,7 +138,7 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
     def terminal(
         self, state: GridWorldState, rng: Any = None, params: Any = None
     ) -> bool:
-        return state.agent == state.target
+        return state.step == self.max_steps
 
     def state_info(self, state: GridWorldState, params: Any = None) -> Info:
         dx = abs(state.agent[0] - state.target[0])
