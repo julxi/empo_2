@@ -1,4 +1,4 @@
-from src.grid_world.env import (
+from .env import (
     Action,
     GridWorldFuncEnv,
     GridWorldState,

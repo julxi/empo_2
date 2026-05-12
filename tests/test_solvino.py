@@ -1,7 +1,7 @@
 import pytest
 
-import src.grid_world.env as env
-import src.grid_world.solvino as solvino
+import grid_world.env as env
+import grid_world.solvino as solvino
 
 
 @pytest.mark.parametrize("size", [5, 7, 9])
