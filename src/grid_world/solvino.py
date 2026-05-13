@@ -20,8 +20,6 @@ class BackwardInductionSolver:
         self.env = func_env
         self.params = params
 
-        self.humans_x_goals = [len(goals) for goals in func_env.population]
-
         self.in_progress: set = set()
         self.Q_r: dict = {}
         self.robot_policy: dict = {}
@@ -36,9 +34,9 @@ class BackwardInductionSolver:
         if state in self.in_progress:
             return
         if self.env.terminal(state):
-            for human_idx in range(len(self.humans_x_goals)):
-                for goal_idx in range(self.humans_x_goals[human_idx]):
-                    self.V_h[human_idx, goal_idx, state] = 0.0
+            self.V_h[state] = [
+                [0.0] * len(human_goals) for human_goals in self.env.population
+            ]
             self.V_r[state] = 0.0
             return
 
@@ -75,28 +73,22 @@ class BackwardInductionSolver:
 
         # V_h
         rewards = self.env.reward(state, best_action, next_state)
-        for human_idx in range(len(self.humans_x_goals)):
-            for goal_idx in range(self.humans_x_goals[human_idx]):
-                self.V_h[human_idx, goal_idx, state] = (
-                    rewards[human_idx][goal_idx]
-                    + self.params.gamma_h * self.V_h[human_idx, goal_idx, next_state]
-                )
+        self.V_h[state] = [
+            [
+                r + self.params.gamma_h * v_next
+                for r, v_next in zip(human_rewards, human_v_next)
+            ]
+            for human_rewards, human_v_next in zip(rewards, self.V_h[next_state])
+        ]
 
         # X_h
-        for human_idx in range(len(self.humans_x_goals)):
-            power_aggregate = 0
-            for goal_idx in range(self.humans_x_goals[human_idx]):
-                power_aggregate += (
-                    self.V_h[human_idx, goal_idx, state] ** self.params.zeta
-                )
-            self.X_h[human_idx, state] = power_aggregate
+        self.X_h[state] = [
+            sum(v ** self.params.zeta for v in human_v) for human_v in self.V_h[state]
+        ]
 
         # U_r
-        fair_power = 0
-        for human_idx in range(len(self.humans_x_goals)):
-            fair_power += self.X_h[human_idx, state] ** (-self.params.xi)
-        fair_power = -(fair_power**self.params.eta)
-        self.U_r[state] = fair_power
+        fair_power = sum(x ** (-self.params.xi) for x in self.X_h[state])
+        self.U_r[state] = -(fair_power**self.params.eta)
 
         # V_r
         self.V_r[state] = self.U_r[state] + self.Q_r[state][best_action]
