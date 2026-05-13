@@ -123,6 +123,7 @@ How can we scale $U_h$ to simulate multiple humans with isomorphic goals?
 
 Let's say we have humans $\mathcal{M}\subseteq \mathcal{H}$ with the same goals, i.e., $\mathcal{G}_h = \mathcal{G}_{h'}$ for $h,h' \in \mathcal{M}$.
 Then for $h, h' \in \mathcal{M}$ we have $X_{h} = X_{h'}$. Let $h^* \in \mathcal{M}$ be a representative and then we can write
+
 $$
 U_r(s) \gets -\Big( |\mathcal{M}| \cdot X_{h^*}(s)^{-\xi} + \sum_{h \not\in \mathcal{M}} X_h(s)^{-\xi}\Big)^\eta
 $$
