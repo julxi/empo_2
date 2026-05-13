@@ -94,8 +94,8 @@ $$U_r(s) \gets -\Big( \sum_h X_h(s)^{-\xi} \Big)^\eta$$
 **RL**:
 
 $$Q^\ast_r(s,a_r) \gets U_r(s) + \gamma_r V^\ast_r(T(s,a_r))$$
-$$\pi_r(s) \gets \arg\max_{a_r} Q^_r(s,a_r)$$
-$$V^*_r(s) \gets Q^*_r(s,\pi_r(s))$$
+$$\pi_r(s) \gets \arg\max_{a_r} Q^\ast_r(s,a_r)$$
+$$V^\ast_r(s) \gets Q^\ast_r(s,\pi_r(s))$$
 
 (The starred versions are related to the originals by $V^*_r = V_r$ and $Q^*_r = Q_r + U_r$; the rearrangement is purely to emphasise the RL character.)
 
