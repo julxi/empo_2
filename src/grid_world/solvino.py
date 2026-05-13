@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
-from .env import GridWorldFuncEnv
+from .env import Action, GridWorldFuncEnv
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class BackwardInductionSolver:
 
         self.in_progress.add(state)
 
-        actions = list(range(self.env.action_space.n))
+        actions = list(Action)
         valid_actions = []
         for action in actions:
             next_state = self.env.transition(state, action)
