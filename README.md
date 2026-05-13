@@ -128,7 +128,7 @@ $$
 U_r(s) \gets -\Big( |\mathcal{M}| \cdot X_{h^*}(s)^{-\xi} + \sum_{h \not\in \mathcal{M}} X_h(s)^{-\xi}\Big)^\eta
 $$
 
-We would get the same effect by only retaining the representative $h^*$ and scaling their $U_{h^*}$ by $|\mathcal{M}|^{-\frac{1}{\zeta \xi}}$. This might be surprising at first: scaling $U_{h^*}$ down corresponds to scaling the magnitude of $U_r$ up.
+We would get the same effect by only retaining the representative $h^\ast$ and scaling their $U_{h^\ast}$ by $|\mathcal{M}|^{-\frac{1}{\zeta \xi}}$. This might be surprising at first: scaling $U_{h^\ast}$ down corresponds to scaling the magnitude of $U_r$ up.
 
 #### Backwards induction
 
