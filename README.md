@@ -15,11 +15,10 @@ The phase 2 equations are designed to find a policy for the robot $r$, based on 
 In addition, we need to fix the normative parameters $\gamma_r, \beta_r, \gamma_h, \zeta, \xi, \eta$ that shape the robot policy.
 
 
-**Empowerment state-action-value**
+**Empowerment state-action-value (4)**
 
 $$
 Q_r(s,a_r) \gets \mathbb{E}_g \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} \gamma_r V_r(s')
-\tag{4}
 $$
 
 **Power-law policy**
