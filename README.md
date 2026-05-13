@@ -35,6 +35,7 @@ V_h(s,g_h) \gets& U_h(s,g_h) + (1 - U_h(s,g_h)) \\
 &\cdot \mathbb{E}_{a_r \sim \pi_r(s)} \mathbb{E}_{g_{-h}} \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} \gamma_h V_h(s', g_h)
 \end{aligned}
 $$
+
 $U_h(s,g_h) = [s \in g_h]$ is the indicator function
 
 **(7) Aggregation of human power**
