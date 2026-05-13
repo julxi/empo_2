@@ -106,9 +106,11 @@ Assume that $U_h$ is zero except for terminal states, and additionally that $\ga
 Consider a solution and its trajectory of the deterministic policy $\pi_r$ from the starting state $s_0$.
 $V_h(\cdot, g_h)$ is constant on that trajectory since $V_h(s_i,g_h) = V_h(s_{i+1},g_h)$ for all non-terminal states. Then $X_h$ and $U_r$ are also constant on the trajectory.
 Note that we can write 
+
 $$
 V_r(s) \gets U_r(s) + \gamma_r V_r\big(T(s,\pi_r(s))\big)
 $$
+
 Let $N$ denote the trajectory length and $s_N$ its terminal state. Then $V_r(s_i) = U_r(s_i) + V_r(s_{i+1})$, and unrolling gives $V_r(s_i) = (N - i + 1) \cdot U_r(s_N)$.
 
 Note that $U_r < 0$ and values closer to zero are better. So a policy that creates shorter trajectories with same terminal $U_r(s_N)$ performs better. If all episodes have equal length then relative performance between policies only depends on $U_r(s_N)$.
@@ -117,7 +119,7 @@ Note that $U_r < 0$ and values closer to zero are better. So a policy that creat
 
 How can we scale $U_h$ to simulate multiple humans with isomorphic goals?
 
-> The text below is not quite right anymore due to changes in the formulas
+> The text below is not quite right anymore due to changes in the formulas. It does need some updating
 
 Let's say we have humans $\mathcal{M}\subseteq \mathcal{H}$ with the same goals, i.e., $\mathcal{G}_h = \mathcal{G}_{h'}$ for $h,h' \in \mathcal{M}$.
 Then for $h, h' \in \mathcal{M}$ we have $X_{h} = X_{h'}$. Let $h^* \in \mathcal{M}$ be a representative and then we can write
