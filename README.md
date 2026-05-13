@@ -86,10 +86,13 @@ $$V_r(s) \gets U_r(s) + Q_r(s,\pi_r(s))$$
 We can rearrange the equations into two parts – a utility component and an RL component. This formulation is less convenient for implementation but looks nice theoretically.
 
 **Utility (unchanged)**:
+
 $$V_h(s, g_h) \gets U_h(s,g_h) + \gamma_h\big(1- U_h(s,g_h)\big) V_h\big(T(s,\pi_r(s)),g_h\big)$$
 $$X_h(s) \gets \sum_{g_h \in \mathcal{G}_h} V_h(s,g_h)^\zeta$$
 $$U_r(s) \gets -\Big( \sum_h X_h(s)^{-\xi} \Big)^\eta$$
+
 **RL**:
+
 $$Q^*_r(s,a_r) \gets U_r(s) + \gamma_r V^*_r(T(s,a_r))$$
 $$\pi_r(s) \gets \arg\max_{a_r} Q^*_r(s,a_r)$$
 $$V^*_r(s) \gets Q^*_r(s,\pi_r(s))$$
