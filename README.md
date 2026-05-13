@@ -15,43 +15,38 @@ The phase 2 equations are designed to find a policy for the robot $r$, based on 
 In addition, we need to fix the normative parameters $\gamma_r, \beta_r, \gamma_h, \zeta, \xi, \eta$ that shape the robot policy.
 
 
-**Empowerment state-action-value (4)**
-
+**(4): Empowerment state-action-value **
 $$
 Q_r(s,a_r) \gets \mathbb{E}_g \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} \gamma_r V_r(s')
 $$
 
-**Power-law policy**
+**(5): Power-law policy**
 $$
 \pi_r(s)(a_r) \propto (-Q_r(s,a_r))^{-\beta_r}
-\tag{5}
 $$
 
-**Goal-fulfilment value**
+**(6): Goal-fulfilment value**
 $$
 \begin{aligned}
 V_h(s,g_h) \gets& U_h(s,g_h) + (1 - U_h(s,g_h)) \\
 &\cdot \mathbb{E}_{a_r \sim \pi_r(s)} \mathbb{E}_{g_{-h}} \mathbb{E}_{a_\mathcal{H} \sim \pi_\mathcal{H}(s,g)} \mathbb{E}_{s' \sim T(s,a)} \gamma_h V_h(s', g_h)
 \end{aligned}
-\tag{6}
 $$
 $U_h(s,g_h) = [s \in g_h]$ is the indicator function
 
-**Aggregation of human power**
+**(7) Aggregation of human power**
 $$
 X_h(s) \gets \sum_{g_h \in \mathcal{G}_h} V_h(s,g_h)^\zeta
-\tag{7}
 $$
 
-**Fair distribution of human power**
+**(8) Fair distribution of human power**
 $$
 U_r(s) \gets - (\sum_h X_h(s)^{-\xi})^\eta
-\tag{8}
 $$
-**Empowerment state-value**
+
+**(9) Empowerment state-value**
 $$
 V_r(s) \gets U_r(s) + \mathbb{E}_{a_r \sim \pi_r(s)} Q_r(s,a_r)
-\tag{9}
 $$
 
 Comments:
