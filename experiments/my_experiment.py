@@ -11,7 +11,7 @@ import argparse
 
 from grid_world import GridWorldState, empo_eval, solvino
 
-from experiments._common import (
+from _common import (
     Instance,
     add_common_az_args,
     config_from_args,
@@ -20,11 +20,12 @@ from experiments._common import (
 
 
 def default_instances() -> list[Instance]:
+    size = 10
     return [
         Instance(
             name="biggy",
-            size=5,
-            max_steps=2 * 5,
+            size=size,
+            max_steps=2 * size,
             start=GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0),
         ),
     ]

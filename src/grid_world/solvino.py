@@ -6,17 +6,19 @@ from .env import Action, GridWorldFuncEnv
 
 @dataclass(frozen=True)
 class EmpoParameter:
-    gamma_r: float
-    beta_r: float
-    gamma_h: float
-    zeta: float
-    xi: float
-    eta: float
+    gamma_r: float = 1
+    beta_r: float = 1
+    gamma_h: float = 1
+    zeta: float = 2
+    xi: float = 1
+    eta: float = 1
 
 
 # Special case that solves on a spanning tree
 class BackwardInductionSolver:
-    def __init__(self, func_env: GridWorldFuncEnv, params: EmpoParameter):
+    def __init__(
+        self, func_env: GridWorldFuncEnv, params: EmpoParameter = EmpoParameter()
+    ):
         self.env = func_env
         self.params = params
 
@@ -83,7 +85,7 @@ class BackwardInductionSolver:
 
         # X_h
         self.X_h[state] = [
-            sum(v ** self.params.zeta for v in human_v) for human_v in self.V_h[state]
+            sum(v**self.params.zeta for v in human_v) for human_v in self.V_h[state]
         ]
 
         # U_r

@@ -27,11 +27,7 @@ type Info = dict[str, float]
 
 @dataclass(frozen=True)
 class GridWorldState:
-    """Minimal Markov state: what dynamics advance and what solvino hashes.
-
-    No static episode config (walls, board size, max_steps) lives here —
-    those belong on the env and surface through :class:`GridWorldObs`.
-    """
+    "Minimal Markov state. Only dynamic objects"
 
     agent: tuple[int, int]
     target: tuple[int, int]
@@ -41,11 +37,7 @@ class GridWorldState:
 
 @dataclass(frozen=True)
 class GridWorldObs:
-    """What anything outside the dynamics (learners, goal functions) sees.
-
-    Carries the dynamic positions from the state plus the static episode
-    config from the env, so consumers don't need an env reference.
-    """
+    """Complete state description: Dynamic and static objects"""
 
     agent: tuple[int, int]
     target: tuple[int, int]
@@ -57,7 +49,8 @@ class GridWorldObs:
 
 
 type Goal = Callable[[GridWorldObs], float]
-type Population = list[list[Goal]]
+type Human = list[Goal]
+type Population = list[Human]
 type Rewards = list[list[float]]
 
 
@@ -93,7 +86,9 @@ def render_grid(obs: GridWorldObs) -> str:
     return "\n".join(rows)
 
 
-class GridWorldFuncEnv(FuncEnv[GridWorldState, GridWorldObs, int, Rewards, bool, None, None]):
+class GridWorldFuncEnv(
+    FuncEnv[GridWorldState, GridWorldObs, int, Rewards, bool, None, None]
+):
     size: int
 
     def __init__(
@@ -197,10 +192,7 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, GridWorldObs, int, Rewards, bool,
         if not self.terminal(next_state, rng, params):
             return [[0.0] * len(human_goals) for human_goals in self.population]
         obs = self.observation(next_state)
-        return [
-            [goal(obs) for goal in human_goals]
-            for human_goals in self.population
-        ]
+        return [[goal(obs) for goal in human_goals] for human_goals in self.population]
 
     def terminal(
         self, state: GridWorldState, rng: Any = None, params: Any = None
