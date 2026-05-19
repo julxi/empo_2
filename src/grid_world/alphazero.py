@@ -6,7 +6,10 @@ can be computed by a single backward sweep (see `empo_eval.evaluate_trajectory`)
 We treat that V_r as the optimisation target for the robot policy.
 
 Pieces:
-- `PolicyValueNet`: small MLP, outputs (policy logits, value).
+- `PolicyValueCNN`: small residual CNN that consumes the channel-stacked state
+  description (agent / target / box / walls / step) and outputs
+  (policy logits, value). Convolutions share weights spatially, which is the
+  right inductive bias for sokoban-style problems with walls and box pushing.
 - `MCTS`: standard PUCT search. Since dynamics are deterministic, Q at edge
   (s,a) directly tracks V_r at the child state T(s,a); we do not add per-step
   U_r terms inside the tree (they are constant in `a` and so do not affect
@@ -31,7 +34,7 @@ import torch
 from torch import nn
 
 from .empo_eval import evaluate_trajectory
-from .env import Action, GridWorldFuncEnv, GridWorldState
+from .env import Action, GridWorldFuncEnv, GridWorldObs, GridWorldState
 from .solvino import EmpoParameter
 
 
@@ -40,66 +43,10 @@ from .solvino import EmpoParameter
 # --------------------------------------------------------------------------- #
 
 
-def encode_state(state: GridWorldState, size: int, max_steps: int) -> np.ndarray:
-    """7-dim feature vector: normalised absolute positions + step.
-
-    Cheap, works well for small grids where the network can effectively
-    memorise (agent, box, step) -> value.
-    """
-    denom = max(size - 1, 1)
-    return np.array(
-        [
-            state.agent[0] / denom,
-            state.agent[1] / denom,
-            state.target[0] / denom,
-            state.target[1] / denom,
-            state.box[0] / denom,
-            state.box[1] / denom,
-            state.step / max_steps,
-        ],
-        dtype=np.float32,
-    )
+CHANNEL_NAMES: tuple[str, ...] = ("agent", "target", "box", "walls", "step")
 
 
-def encode_state_rich(
-    state: GridWorldState, size: int, max_steps: int
-) -> np.ndarray:
-    """11-dim feature vector with relative + centre-relative features.
-
-    Adds inductive biases that matter on larger grids:
-    - agent-box delta (so adjacency / pushing is a linear feature)
-    - box displacement from grid centre (so "distance to fair column" is linear)
-
-    These features let a small MLP generalise across the grid instead of
-    having to memorise (agent, box) pairs.
-    """
-    denom = max(size - 1, 1)
-    centre = (size - 1) / 2
-    half = max(centre, 1.0)
-    return np.array(
-        [
-            state.agent[0] / denom,
-            state.agent[1] / denom,
-            state.target[0] / denom,
-            state.target[1] / denom,
-            state.box[0] / denom,
-            state.box[1] / denom,
-            state.step / max_steps,
-            (state.agent[0] - state.box[0]) / denom,
-            (state.agent[1] - state.box[1]) / denom,
-            (state.box[0] - centre) / half,
-            (state.box[1] - centre) / half,
-        ],
-        dtype=np.float32,
-    )
-
-
-CHANNEL_NAMES: tuple[str, ...] = ("agent", "target", "box", "step")
-
-
-def encode_state_channels(
-    state: GridWorldState, size: int, max_steps: int
-) -> np.ndarray:
+def encode_obs(obs: GridWorldObs) -> np.ndarray:
     """Channel-stacked spatial encoding with shape ``(C, size, size)``.
 
     Canonical AlphaZero-style state description: one plane per semantically
@@ -110,21 +57,21 @@ def encode_state_channels(
       0. agent indicator
       1. target indicator
       2. box indicator
-      3. normalised step, broadcast across the grid
+      3. walls indicator (1 at every wall cell, taken from ``obs.walls``)
+      4. normalised step, broadcast across the grid (``step / max_steps``)
 
-    The natural ``(C, size, size)`` shape is preserved so a convolutional
-    trunk could be dropped in without changing the encoder; the current MLP
-    flattens it at the input boundary.
+    Pure ``obs -> tensor``: everything the encoder needs (positions, walls,
+    board size, max_steps) is on the observation.
     """
+    size = obs.size
     channels = np.zeros((len(CHANNEL_NAMES), size, size), dtype=np.float32)
-    channels[0, state.agent[0], state.agent[1]] = 1.0
-    channels[1, state.target[0], state.target[1]] = 1.0
-    channels[2, state.box[0], state.box[1]] = 1.0
-    channels[3, :, :] = state.step / max_steps
+    channels[0, obs.agent[0], obs.agent[1]] = 1.0
+    channels[1, obs.target[0], obs.target[1]] = 1.0
+    channels[2, obs.box[0], obs.box[1]] = 1.0
+    for (wx, wy) in obs.walls:
+        channels[3, wx, wy] = 1.0
+    channels[4, :, :] = obs.step / obs.max_steps
     return channels
-
-
-type StateEncoder = "callable[[GridWorldState, int, int], np.ndarray]"
 
 
 # --------------------------------------------------------------------------- #
@@ -132,24 +79,59 @@ type StateEncoder = "callable[[GridWorldState, int, int], np.ndarray]"
 # --------------------------------------------------------------------------- #
 
 
-class PolicyValueNet(nn.Module):
+class _ResBlock(nn.Module):
+    def __init__(self, channels: int) -> None:
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.relu(x + self.body(x))
+
+
+class PolicyValueCNN(nn.Module):
+    """Small residual CNN suited to sokoban-style grid problems.
+
+    No batch norm: self-play replay batches are small and skewed, which makes
+    BN's running statistics unstable in this regime. Plain ReLU activations
+    are enough at this scale.
+    """
+
     def __init__(
         self,
-        input_dim: int = 7,
-        hidden_dim: int = 64,
-        num_hidden_layers: int = 2,
+        in_channels: int = len(CHANNEL_NAMES),
+        board_size: int = 5,
+        trunk_channels: int = 32,
+        num_blocks: int = 3,
     ) -> None:
         super().__init__()
-        layers: list[nn.Module] = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
-        for _ in range(num_hidden_layers - 1):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.ReLU())
-        self.trunk = nn.Sequential(*layers)
-        self.policy_head = nn.Linear(hidden_dim, len(Action))
-        self.value_head = nn.Linear(hidden_dim, 1)
+        self.stem = nn.Sequential(
+            nn.Conv2d(in_channels, trunk_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.blocks = nn.Sequential(
+            *[_ResBlock(trunk_channels) for _ in range(num_blocks)]
+        )
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(trunk_channels, 2, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Flatten(),
+            nn.Linear(2 * board_size * board_size, len(Action)),
+        )
+        self.value_head = nn.Sequential(
+            nn.Conv2d(trunk_channels, 1, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Flatten(),
+            nn.Linear(board_size * board_size, 32),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, 1),
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        h = self.trunk(x)
+        h = self.blocks(self.stem(x))
         return self.policy_head(h), self.value_head(h).squeeze(-1)
 
 
@@ -210,23 +192,19 @@ class MCTS:
         self,
         env: GridWorldFuncEnv,
         params: EmpoParameter,
-        net: PolicyValueNet,
+        net: PolicyValueCNN,
         config: MCTSConfig,
         device: torch.device,
-        encoder=encode_state,
     ) -> None:
         self.env = env
         self.params = params
         self.net = net
         self.config = config
         self.device = device
-        self.size = env.size
-        self.max_steps = env.max_steps
-        self.encoder = encoder
 
     def _evaluate(self, state: GridWorldState) -> tuple[np.ndarray, float]:
-        encoded = self.encoder(state, self.size, self.max_steps)
-        x = torch.from_numpy(encoded).reshape(1, -1).to(self.device)
+        encoded = encode_obs(self.env.observation(state))
+        x = torch.from_numpy(encoded).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits, value = self.net(x)
         priors = torch.softmax(logits, dim=-1).cpu().numpy()[0]
@@ -392,7 +370,7 @@ def self_play_episode(
             temp = 0.0
         root = mcts.run(current, add_root_noise=True, rng=rng)
         pi = visit_policy(root, temp)
-        feats.append(mcts.encoder(current, env.size, env.max_steps))
+        feats.append(encode_obs(env.observation(current)))
         policies.append(pi)
         action = int(rng.choice(len(Action), p=pi))
         actions.append(action)
@@ -423,14 +401,13 @@ class TrainConfig:
 
 
 def train_step(
-    net: PolicyValueNet,
+    net: PolicyValueCNN,
     optimizer: torch.optim.Optimizer,
     batch: Iterable[TrainingExample],
     cfg: TrainConfig,
     device: torch.device,
 ) -> tuple[float, float]:
     feats = torch.from_numpy(np.stack([b.features for b in batch])).to(device)
-    feats = feats.reshape(feats.shape[0], -1)
     target_pi = torch.from_numpy(np.stack([b.policy for b in batch])).float().to(device)
     target_v = torch.tensor([b.value for b in batch], dtype=torch.float32, device=device)
 
@@ -451,24 +428,6 @@ def train_step(
 # --------------------------------------------------------------------------- #
 
 
-ENCODERS = {
-    "flat": encode_state,
-    "rich": encode_state_rich,
-    "channels": encode_state_channels,
-}
-
-
-def encoder_input_dim(name: str, size: int) -> int:
-    """Flattened input dimensionality of an encoder given the grid size."""
-    if name == "flat":
-        return 7
-    if name == "rich":
-        return 11
-    if name == "channels":
-        return len(CHANNEL_NAMES) * size * size
-    raise ValueError(f"Unknown encoder: {name!r}")
-
-
 @dataclass
 class AlphaZeroConfig:
     iterations: int = 20
@@ -478,11 +437,8 @@ class AlphaZeroConfig:
     temperature: float = 1.0
     temperature_drop_step: Optional[int] = None
     replay_buffer_size: int = 4096
-    # "flat" (7 dims), "rich" (11 dims, relative + centre), or
-    # "channels" (C x size x size spatial planes, flattened for the MLP).
-    encoder: str = "flat"
-    hidden_dim: int = 64
-    num_hidden_layers: int = 2
+    trunk_channels: int = 32
+    num_blocks: int = 3
 
 
 class AlphaZeroSolver:
@@ -500,11 +456,11 @@ class AlphaZeroSolver:
         self.device = device or torch.device("cpu")
         torch.manual_seed(seed)
         self.rng = np.random.default_rng(seed)
-        self.encoder = ENCODERS[config.encoder]
-        self.net = PolicyValueNet(
-            input_dim=encoder_input_dim(config.encoder, env.size),
-            hidden_dim=config.hidden_dim,
-            num_hidden_layers=config.num_hidden_layers,
+        self.net = PolicyValueCNN(
+            in_channels=len(CHANNEL_NAMES),
+            board_size=env.size,
+            trunk_channels=config.trunk_channels,
+            num_blocks=config.num_blocks,
         ).to(self.device)
         self.optimizer = torch.optim.Adam(
             self.net.parameters(),
@@ -526,10 +482,7 @@ class AlphaZeroSolver:
                 fpu_mode=cfg.fpu_mode,
                 fpu_reduction=cfg.fpu_reduction,
             )
-        return MCTS(
-            self.env, self.params, self.net, cfg, self.device,
-            encoder=self.encoder,
-        )
+        return MCTS(self.env, self.params, self.net, cfg, self.device)
 
     def fit(self, start_state: GridWorldState) -> None:
         mcts = self.mcts()

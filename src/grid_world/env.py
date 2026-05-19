@@ -5,7 +5,6 @@ from typing import Any, Callable
 import numpy as np
 from gymnasium import spaces
 from gymnasium.experimental.functional import FuncEnv
-from numpy.typing import NDArray
 
 
 class Action(IntEnum):
@@ -23,24 +22,78 @@ _DELTAS: dict[Action, tuple[int, int]] = {
 }
 
 
-type Obs = dict[str, NDArray[np.int64]]
 type Info = dict[str, float]
 
 
 @dataclass(frozen=True)
 class GridWorldState:
+    """Minimal Markov state: what dynamics advance and what solvino hashes.
+
+    No static episode config (walls, board size, max_steps) lives here —
+    those belong on the env and surface through :class:`GridWorldObs`.
+    """
+
     agent: tuple[int, int]
     target: tuple[int, int]
     box: tuple[int, int]
     step: int
 
 
-type Goal = Callable[[GridWorldState], float]
+@dataclass(frozen=True)
+class GridWorldObs:
+    """What anything outside the dynamics (learners, goal functions) sees.
+
+    Carries the dynamic positions from the state plus the static episode
+    config from the env, so consumers don't need an env reference.
+    """
+
+    agent: tuple[int, int]
+    target: tuple[int, int]
+    box: tuple[int, int]
+    step: int
+    walls: frozenset[tuple[int, int]]
+    size: int
+    max_steps: int
+
+
+type Goal = Callable[[GridWorldObs], float]
 type Population = list[list[Goal]]
 type Rewards = list[list[float]]
 
 
-class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, None]):
+def _in_bounds(pos: tuple[int, int], size: int) -> bool:
+    return 0 <= pos[0] < size and 0 <= pos[1] < size
+
+
+def render_grid(obs: GridWorldObs) -> str:
+    """ASCII render of an observation with ``y = size - 1`` drawn on top.
+
+    Glyphs: ``A`` agent, ``X`` box, ``G`` target, ``W`` wall.
+    """
+    size = obs.size
+    rows: list[str] = []
+    bar = "+" + "+".join(["---"] * size) + "+"
+    for y in range(size - 1, -1, -1):
+        rows.append(bar)
+        cells: list[str] = []
+        for x in range(size):
+            pos = (x, y)
+            if pos == obs.agent:
+                cells.append(" A ")
+            elif pos == obs.box:
+                cells.append(" X ")
+            elif pos == obs.target:
+                cells.append(" G ")
+            elif pos in obs.walls:
+                cells.append(" W ")
+            else:
+                cells.append("   ")
+        rows.append("|" + "|".join(cells) + "|")
+    rows.append(bar)
+    return "\n".join(rows)
+
+
+class GridWorldFuncEnv(FuncEnv[GridWorldState, GridWorldObs, int, Rewards, bool, None, None]):
     size: int
 
     def __init__(
@@ -48,29 +101,37 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
         size: int,
         population: Population,
         max_steps: int,
+        walls: "frozenset[tuple[int, int]] | None" = None,
     ) -> None:
         super().__init__()
         self.size = size
         self.population = population
         self.max_steps = max_steps
+        self.walls: frozenset[tuple[int, int]] = frozenset(walls or ())
         coord = spaces.Box(0, size - 1, shape=(2,), dtype=np.int64)
+        # observation_space is kept for gym compatibility but nothing in this
+        # codebase actually consumes it.
         self.observation_space = spaces.Dict(
             {"agent": coord, "target": coord, "box": coord}
         )
         self.action_space = spaces.Discrete(4)
 
     def initial(self, rng: np.random.Generator, params: Any = None) -> GridWorldState:
-        flat = rng.choice(self.size * self.size, size=3, replace=False)
-        rows, cols = np.unravel_index(flat, (self.size, self.size))
+        free = [
+            (x, y)
+            for x in range(self.size)
+            for y in range(self.size)
+            if (x, y) not in self.walls
+        ]
+        if len(free) < 3:
+            raise ValueError("not enough free cells for agent, target and box")
+        idx = rng.choice(len(free), size=3, replace=False)
         return GridWorldState(
-            agent=(int(rows[0]), int(cols[0])),
-            target=(int(rows[1]), int(cols[1])),
-            box=(int(rows[2]), int(cols[2])),
+            agent=free[int(idx[0])],
+            target=free[int(idx[1])],
+            box=free[int(idx[2])],
             step=0,
         )
-
-    def _in_bounds(self, pos: tuple[int, int]) -> bool:
-        return 0 <= pos[0] < self.size and 0 <= pos[1] < self.size
 
     def transition(
         self,
@@ -81,8 +142,9 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
     ) -> GridWorldState:
         dx, dy = _DELTAS[Action(action)]
         next_step = state.step + 1
+        walls = self.walls
         new_agent = (state.agent[0] + dx, state.agent[1] + dy)
-        if not self._in_bounds(new_agent):
+        if not _in_bounds(new_agent, self.size) or new_agent in walls:
             return GridWorldState(
                 agent=state.agent,
                 target=state.target,
@@ -91,7 +153,7 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
             )
         if new_agent == state.box:
             new_box = (state.box[0] + dx, state.box[1] + dy)
-            if not self._in_bounds(new_box):
+            if not _in_bounds(new_box, self.size) or new_box in walls:
                 return GridWorldState(
                     agent=state.agent,
                     target=state.target,
@@ -113,12 +175,16 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
 
     def observation(
         self, state: GridWorldState, rng: Any = None, params: Any = None
-    ) -> Obs:
-        return {
-            "agent": np.array(state.agent, dtype=np.int64),
-            "target": np.array(state.target, dtype=np.int64),
-            "box": np.array(state.box, dtype=np.int64),
-        }
+    ) -> GridWorldObs:
+        return GridWorldObs(
+            agent=state.agent,
+            target=state.target,
+            box=state.box,
+            step=state.step,
+            walls=self.walls,
+            size=self.size,
+            max_steps=self.max_steps,
+        )
 
     def reward(
         self,
@@ -130,8 +196,9 @@ class GridWorldFuncEnv(FuncEnv[GridWorldState, Obs, int, Rewards, bool, None, No
     ) -> Rewards:
         if not self.terminal(next_state, rng, params):
             return [[0.0] * len(human_goals) for human_goals in self.population]
+        obs = self.observation(next_state)
         return [
-            [goal(next_state) for goal in human_goals]
+            [goal(obs) for goal in human_goals]
             for human_goals in self.population
         ]
 

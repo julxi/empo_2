@@ -15,26 +15,16 @@ from __future__ import annotations
 
 import argparse
 import time
-from dataclasses import dataclass
 
-import numpy as np
+from grid_world import GridWorldState, empo_eval, solvino
 
-from grid_world import alphazero, empo_eval, env, solvino
-
-
-def fair_box_population(size: int):
-    """Each human cares about one inequality on the box's first coordinate."""
-    human_1 = [(lambda x, i=i: float(x.box[0] <= i)) for i in range(size)]
-    human_2 = [(lambda x, i=i: float(x.box[0] >= i)) for i in range(size)]
-    return [human_1, human_2]
-
-
-@dataclass
-class Instance:
-    name: str
-    size: int
-    max_steps: int
-    start: env.GridWorldState
+from experiments._common import (
+    Instance,
+    add_common_az_args,
+    build_env,
+    config_from_args,
+    train_alphazero,
+)
 
 
 def default_instances() -> list[Instance]:
@@ -43,27 +33,25 @@ def default_instances() -> list[Instance]:
             name="fair-5x5-corner",
             size=5,
             max_steps=10,
-            start=env.GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0),
+            start=GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0),
         ),
         Instance(
             name="fair-5x5-mid",
             size=5,
             max_steps=10,
-            start=env.GridWorldState(agent=(2, 2), target=(0, 0), box=(2, 3), step=0),
+            start=GridWorldState(agent=(2, 2), target=(0, 0), box=(2, 3), step=0),
         ),
         Instance(
             name="fair-7x7-corner",
             size=7,
             max_steps=14,
-            start=env.GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0),
+            start=GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0),
         ),
     ]
 
 
 def exact_solution(instance: Instance, params: solvino.EmpoParameter):
-    e = env.GridWorldFuncEnv(
-        instance.size, fair_box_population(instance.size), max_steps=instance.max_steps
-    )
+    e = build_env(instance)
     s = solvino.BackwardInductionSolver(e, params)
     t0 = time.perf_counter()
     s.solve(instance.start)
@@ -71,38 +59,15 @@ def exact_solution(instance: Instance, params: solvino.EmpoParameter):
     return e, s, elapsed
 
 
-def alphazero_solution(
-    instance: Instance,
-    params: solvino.EmpoParameter,
-    cfg: alphazero.AlphaZeroConfig,
-    seed: int = 0,
-):
-    e = env.GridWorldFuncEnv(
-        instance.size, fair_box_population(instance.size), max_steps=instance.max_steps
-    )
-    az = alphazero.AlphaZeroSolver(e, params, cfg, seed=seed)
-    t0 = time.perf_counter()
-    az.fit(instance.start)
-    elapsed = time.perf_counter() - t0
-    return e, az, elapsed
-
-
-def _terminal_box(env_, start, policy):
-    cur = start
-    while not env_.terminal(cur):
-        cur = env_.transition(cur, policy(cur))
-    return cur.box
-
-
 def report(
     instance: Instance,
     params: solvino.EmpoParameter,
-    cfg: alphazero.AlphaZeroConfig,
+    cfg,
     eval_simulations: int = 256,
     seed: int = 0,
 ) -> dict:
     e_exact, exact, t_exact = exact_solution(instance, params)
-    e_az, az, t_az = alphazero_solution(instance, params, cfg, seed=seed)
+    e_az, az, t_az = train_alphazero(instance, params, cfg, seed=seed)
     optimal_V = exact.V_r[instance.start]
     optimal_action = int(exact.robot_policy[instance.start])
 
@@ -110,8 +75,11 @@ def report(
     az_action = greedy(instance.start)
     az_traj = empo_eval.evaluate_policy(e_az, params, greedy, instance.start)
     az_V = az_traj.V_r[0]
-    az_terminal_box = _terminal_box(e_az, instance.start, greedy)
-    exact_terminal_box = _terminal_box(e_exact, instance.start, lambda s: exact.robot_policy[s])
+    az_terminal_box = az_traj.states[-1].box
+    exact_states, _ = empo_eval.rollout(
+        e_exact, lambda s: exact.robot_policy[s], instance.start
+    )
+    exact_terminal_box = exact_states[-1].box
 
     print(f"\n=== {instance.name} (size={instance.size}, T={instance.max_steps}) ===")
     print(f"exact:    V_r={optimal_V:.4f}  best_action={optimal_action}  "
@@ -146,28 +114,13 @@ def report(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iterations", type=int, default=30)
-    parser.add_argument("--episodes-per-iter", type=int, default=8)
-    parser.add_argument("--sims", type=int, default=64)
-    parser.add_argument("--eval-sims", type=int, default=256)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
-        "--instance",
-        type=str,
-        default=None,
-        help="restrict to a single instance by name",
-    )
+    add_common_az_args(parser)
     args = parser.parse_args()
 
     params = solvino.EmpoParameter(
         gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1
     )
-    cfg = alphazero.AlphaZeroConfig(
-        iterations=args.iterations,
-        episodes_per_iter=args.episodes_per_iter,
-        mcts=alphazero.MCTSConfig(num_simulations=args.sims),
-        temperature_drop_step=max(1, 8),
-    )
+    cfg = config_from_args(args)
 
     instances = default_instances()
     if args.instance:

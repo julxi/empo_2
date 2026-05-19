@@ -20,18 +20,39 @@ def _params():
     )
 
 
-def test_encode_state_shape_and_range() -> None:
+def test_encode_obs_shape_and_planes() -> None:
     size, max_steps = 5, 10
+    walls = frozenset({(0, 1), (2, 3)})
+    func_env = env.GridWorldFuncEnv(size, [], max_steps=max_steps, walls=walls)
     state = env.GridWorldState(agent=(0, 0), target=(2, 3), box=(4, 4), step=5)
-    feats = az.encode_state(state, size, max_steps)
-    assert feats.shape == (7,)
-    assert feats.dtype == np.float32
-    assert (0.0 <= feats).all() and (feats <= 1.0).all()
+    obs = func_env.observation(state)
+    enc = az.encode_obs(obs)
+
+    assert enc.shape == (len(az.CHANNEL_NAMES), size, size)
+    assert enc.dtype == np.float32
+
+    # One-hot entity planes.
+    assert enc[0].sum() == 1.0 and enc[0, 0, 0] == 1.0
+    assert enc[1].sum() == 1.0 and enc[1, 2, 3] == 1.0
+    assert enc[2].sum() == 1.0 and enc[2, 4, 4] == 1.0
+
+    # Wall plane matches `obs.walls` exactly.
+    assert enc[3].sum() == len(walls)
+    for (x, y) in walls:
+        assert enc[3, x, y] == 1.0
+
+    # Step plane is constant at step / max_steps.
+    assert np.allclose(enc[4], 5 / 10)
 
 
-def test_policy_value_net_forward() -> None:
-    net = az.PolicyValueNet(input_dim=7, hidden_dim=16)
-    x = torch.randn(3, 7)
+def test_policy_value_cnn_forward() -> None:
+    net = az.PolicyValueCNN(
+        in_channels=len(az.CHANNEL_NAMES),
+        board_size=5,
+        trunk_channels=8,
+        num_blocks=1,
+    )
+    x = torch.randn(3, len(az.CHANNEL_NAMES), 5, 5)
     logits, value = net(x)
     assert logits.shape == (3, 4)
     assert value.shape == (3,)
