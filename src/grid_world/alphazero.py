@@ -41,7 +41,11 @@ from .solvino import EmpoParameter
 
 
 def encode_state(state: GridWorldState, size: int, max_steps: int) -> np.ndarray:
-    """7-dim feature vector for the network."""
+    """7-dim feature vector: normalised absolute positions + step.
+
+    Cheap, works well for small grids where the network can effectively
+    memorise (agent, box, step) -> value.
+    """
     denom = max(size - 1, 1)
     return np.array(
         [
@@ -57,20 +61,90 @@ def encode_state(state: GridWorldState, size: int, max_steps: int) -> np.ndarray
     )
 
 
+def encode_state_rich(
+    state: GridWorldState, size: int, max_steps: int
+) -> np.ndarray:
+    """11-dim feature vector with relative + centre-relative features.
+
+    Adds inductive biases that matter on larger grids:
+    - agent-box delta (so adjacency / pushing is a linear feature)
+    - box displacement from grid centre (so "distance to fair column" is linear)
+
+    These features let a small MLP generalise across the grid instead of
+    having to memorise (agent, box) pairs.
+    """
+    denom = max(size - 1, 1)
+    centre = (size - 1) / 2
+    half = max(centre, 1.0)
+    return np.array(
+        [
+            state.agent[0] / denom,
+            state.agent[1] / denom,
+            state.target[0] / denom,
+            state.target[1] / denom,
+            state.box[0] / denom,
+            state.box[1] / denom,
+            state.step / max_steps,
+            (state.agent[0] - state.box[0]) / denom,
+            (state.agent[1] - state.box[1]) / denom,
+            (state.box[0] - centre) / half,
+            (state.box[1] - centre) / half,
+        ],
+        dtype=np.float32,
+    )
+
+
+CHANNEL_NAMES: tuple[str, ...] = ("agent", "target", "box", "step")
+
+
+def encode_state_channels(
+    state: GridWorldState, size: int, max_steps: int
+) -> np.ndarray:
+    """Channel-stacked spatial encoding with shape ``(C, size, size)``.
+
+    Canonical AlphaZero-style state description: one plane per semantically
+    distinct entity (with a single 1 at its grid cell), plus a scalar plane
+    holding the normalised step count.
+
+    Channels (see :data:`CHANNEL_NAMES`):
+      0. agent indicator
+      1. target indicator
+      2. box indicator
+      3. normalised step, broadcast across the grid
+
+    The natural ``(C, size, size)`` shape is preserved so a convolutional
+    trunk could be dropped in without changing the encoder; the current MLP
+    flattens it at the input boundary.
+    """
+    channels = np.zeros((len(CHANNEL_NAMES), size, size), dtype=np.float32)
+    channels[0, state.agent[0], state.agent[1]] = 1.0
+    channels[1, state.target[0], state.target[1]] = 1.0
+    channels[2, state.box[0], state.box[1]] = 1.0
+    channels[3, :, :] = state.step / max_steps
+    return channels
+
+
+type StateEncoder = "callable[[GridWorldState, int, int], np.ndarray]"
+
+
 # --------------------------------------------------------------------------- #
 # Network                                                                     #
 # --------------------------------------------------------------------------- #
 
 
 class PolicyValueNet(nn.Module):
-    def __init__(self, input_dim: int = 7, hidden_dim: int = 64) -> None:
+    def __init__(
+        self,
+        input_dim: int = 7,
+        hidden_dim: int = 64,
+        num_hidden_layers: int = 2,
+    ) -> None:
         super().__init__()
-        self.trunk = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-        )
+        layers: list[nn.Module] = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        for _ in range(num_hidden_layers - 1):
+            layers.append(nn.Linear(hidden_dim, hidden_dim))
+            layers.append(nn.ReLU())
+        self.trunk = nn.Sequential(*layers)
         self.policy_head = nn.Linear(hidden_dim, len(Action))
         self.value_head = nn.Linear(hidden_dim, 1)
 
@@ -139,6 +213,7 @@ class MCTS:
         net: PolicyValueNet,
         config: MCTSConfig,
         device: torch.device,
+        encoder=encode_state,
     ) -> None:
         self.env = env
         self.params = params
@@ -147,10 +222,11 @@ class MCTS:
         self.device = device
         self.size = env.size
         self.max_steps = env.max_steps
+        self.encoder = encoder
 
     def _evaluate(self, state: GridWorldState) -> tuple[np.ndarray, float]:
-        x = torch.from_numpy(encode_state(state, self.size, self.max_steps))
-        x = x.unsqueeze(0).to(self.device)
+        encoded = self.encoder(state, self.size, self.max_steps)
+        x = torch.from_numpy(encoded).reshape(1, -1).to(self.device)
         with torch.no_grad():
             logits, value = self.net(x)
         priors = torch.softmax(logits, dim=-1).cpu().numpy()[0]
@@ -316,7 +392,7 @@ def self_play_episode(
             temp = 0.0
         root = mcts.run(current, add_root_noise=True, rng=rng)
         pi = visit_policy(root, temp)
-        feats.append(encode_state(current, env.size, env.max_steps))
+        feats.append(mcts.encoder(current, env.size, env.max_steps))
         policies.append(pi)
         action = int(rng.choice(len(Action), p=pi))
         actions.append(action)
@@ -354,6 +430,7 @@ def train_step(
     device: torch.device,
 ) -> tuple[float, float]:
     feats = torch.from_numpy(np.stack([b.features for b in batch])).to(device)
+    feats = feats.reshape(feats.shape[0], -1)
     target_pi = torch.from_numpy(np.stack([b.policy for b in batch])).float().to(device)
     target_v = torch.tensor([b.value for b in batch], dtype=torch.float32, device=device)
 
@@ -374,6 +451,24 @@ def train_step(
 # --------------------------------------------------------------------------- #
 
 
+ENCODERS = {
+    "flat": encode_state,
+    "rich": encode_state_rich,
+    "channels": encode_state_channels,
+}
+
+
+def encoder_input_dim(name: str, size: int) -> int:
+    """Flattened input dimensionality of an encoder given the grid size."""
+    if name == "flat":
+        return 7
+    if name == "rich":
+        return 11
+    if name == "channels":
+        return len(CHANNEL_NAMES) * size * size
+    raise ValueError(f"Unknown encoder: {name!r}")
+
+
 @dataclass
 class AlphaZeroConfig:
     iterations: int = 20
@@ -383,6 +478,11 @@ class AlphaZeroConfig:
     temperature: float = 1.0
     temperature_drop_step: Optional[int] = None
     replay_buffer_size: int = 4096
+    # "flat" (7 dims), "rich" (11 dims, relative + centre), or
+    # "channels" (C x size x size spatial planes, flattened for the MLP).
+    encoder: str = "flat"
+    hidden_dim: int = 64
+    num_hidden_layers: int = 2
 
 
 class AlphaZeroSolver:
@@ -400,7 +500,12 @@ class AlphaZeroSolver:
         self.device = device or torch.device("cpu")
         torch.manual_seed(seed)
         self.rng = np.random.default_rng(seed)
-        self.net = PolicyValueNet().to(self.device)
+        self.encoder = ENCODERS[config.encoder]
+        self.net = PolicyValueNet(
+            input_dim=encoder_input_dim(config.encoder, env.size),
+            hidden_dim=config.hidden_dim,
+            num_hidden_layers=config.num_hidden_layers,
+        ).to(self.device)
         self.optimizer = torch.optim.Adam(
             self.net.parameters(),
             lr=config.train.learning_rate,
@@ -421,7 +526,10 @@ class AlphaZeroSolver:
                 fpu_mode=cfg.fpu_mode,
                 fpu_reduction=cfg.fpu_reduction,
             )
-        return MCTS(self.env, self.params, self.net, cfg, self.device)
+        return MCTS(
+            self.env, self.params, self.net, cfg, self.device,
+            encoder=self.encoder,
+        )
 
     def fit(self, start_state: GridWorldState) -> None:
         mcts = self.mcts()
