@@ -15,9 +15,9 @@ Useful for two purposes:
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .env import GridWorldFuncEnv, GridWorldState
-from .solvino import EmpoParameter
-
+from .base import GridWorldState
+from .empo import EmpoParameter
+from .env_base import DeterministicGridWorldEnv
 
 type Policy = Callable[[GridWorldState], int]
 
@@ -32,8 +32,15 @@ class TrajectoryEvaluation:
     V_r: list[float]  # [t]
 
 
+def wrap_dict(d: dict[GridWorldState, int]) -> Policy:
+    def policy(state: GridWorldState):
+        return d[state]
+
+    return policy
+
+
 def rollout(
-    env: GridWorldFuncEnv,
+    env: DeterministicGridWorldEnv,
     policy: Policy,
     start: GridWorldState,
 ) -> tuple[list[GridWorldState], list[int]]:
@@ -49,7 +56,7 @@ def rollout(
 
 
 def evaluate_trajectory(
-    env: GridWorldFuncEnv,
+    env: DeterministicGridWorldEnv,
     params: EmpoParameter,
     states: list[GridWorldState],
     actions: list[int],
@@ -70,7 +77,7 @@ def evaluate_trajectory(
                 V_h[t][h][j] = rewards[h][j] + params.gamma_h * V_h[t + 1][h][j]
 
     X_h: list[list[float]] = [
-        [sum(v ** params.zeta for v in V_h[t][h]) for h in range(len(pop))]
+        [sum(v**params.zeta for v in V_h[t][h]) for h in range(len(pop))]
         for t in range(N + 1)
     ]
 
@@ -78,7 +85,7 @@ def evaluate_trajectory(
     V_r: list[float] = [0.0] * (N + 1)
     for t in range(N - 1, -1, -1):
         fair_power = sum(x ** (-params.xi) for x in X_h[t])
-        U_r[t] = -(fair_power ** params.eta)
+        U_r[t] = -(fair_power**params.eta)
         V_r[t] = U_r[t] + params.gamma_r * V_r[t + 1]
 
     return TrajectoryEvaluation(
@@ -87,7 +94,7 @@ def evaluate_trajectory(
 
 
 def evaluate_policy(
-    env: GridWorldFuncEnv,
+    env: DeterministicGridWorldEnv,
     params: EmpoParameter,
     policy: Policy,
     start: GridWorldState,

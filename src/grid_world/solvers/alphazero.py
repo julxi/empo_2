@@ -7,7 +7,7 @@ We treat that V_r as the optimisation target for the robot policy.
 
 Pieces:
 - `PolicyValueCNN`: small residual CNN that consumes the channel-stacked state
-  description (agent / target / box / walls / step) and outputs
+  description (robot / object / walls / step) and outputs
   (policy logits, value). Convolutions share weights spatially, which is the
   right inductive bias for sokoban-style problems with walls and box pushing.
 - `MCTS`: standard PUCT search. Since dynamics are deterministic, Q at edge
@@ -18,9 +18,9 @@ Pieces:
   into (state, mcts_policy, V_r_target) tuples via the trajectory evaluator.
 - `train`: trains the network on those tuples.
 
-The whole thing intentionally lives in pure Python + numpy + a tiny PyTorch
-network. The environments we care about have ~10^4 states, so this is fast
-enough to compare directly against `BackwardInductionSolver`.
+The encoder below is currently box-flavoured (robot / object / walls / step
+planes). It is enough for `BoxToMiddleEnv`; trolley / interruptibility will
+want their own planes (e.g. button_states) once we train on them. Deferred.
 """
 
 from __future__ import annotations
@@ -33,44 +33,38 @@ import numpy as np
 import torch
 from torch import nn
 
-from .empo_eval import evaluate_trajectory
-from .env import Action, GridWorldFuncEnv, GridWorldObs, GridWorldState
-from .solvino import EmpoParameter
-
+from ..base import Action, GridWorldObs, GridWorldState
+from ..empo import EmpoParameter
+from ..empo_eval import evaluate_trajectory
+from ..env_base import DeterministicGridWorldEnv
 
 # --------------------------------------------------------------------------- #
 # State encoding                                                              #
 # --------------------------------------------------------------------------- #
 
 
-CHANNEL_NAMES: tuple[str, ...] = ("agent", "target", "box", "walls", "step")
+CHANNEL_NAMES: tuple[str, ...] = ("robot", "object", "walls", "step")
 
 
 def encode_obs(obs: GridWorldObs) -> np.ndarray:
-    """Channel-stacked spatial encoding with shape ``(C, size, size)``.
-
-    Canonical AlphaZero-style state description: one plane per semantically
-    distinct entity (with a single 1 at its grid cell), plus a scalar plane
-    holding the normalised step count.
+    """Channel-stacked spatial encoding with shape ``(C, width, height)``.
 
     Channels (see :data:`CHANNEL_NAMES`):
-      0. agent indicator
-      1. target indicator
-      2. box indicator
-      3. walls indicator (1 at every wall cell, taken from ``obs.walls``)
-      4. normalised step, broadcast across the grid (``step / max_steps``)
-
-    Pure ``obs -> tensor``: everything the encoder needs (positions, walls,
-    board size, max_steps) is on the observation.
+      0. robot indicator
+      1. object indicator
+      2. walls indicator (1 at every wall cell)
+      3. normalised step, broadcast across the grid (``step / max_steps``)
     """
-    size = obs.size
-    channels = np.zeros((len(CHANNEL_NAMES), size, size), dtype=np.float32)
-    channels[0, obs.agent[0], obs.agent[1]] = 1.0
-    channels[1, obs.target[0], obs.target[1]] = 1.0
-    channels[2, obs.box[0], obs.box[1]] = 1.0
-    for (wx, wy) in obs.walls:
-        channels[3, wx, wy] = 1.0
-    channels[4, :, :] = obs.step / obs.max_steps
+    state = obs.state
+    layout = obs.layout
+    channels = np.zeros(
+        (len(CHANNEL_NAMES), layout.width, layout.height), dtype=np.float32
+    )
+    channels[0, state.robot[0], state.robot[1]] = 1.0
+    channels[1, state.object[0], state.object[1]] = 1.0
+    for wx, wy in layout.walls:
+        channels[2, wx, wy] = 1.0
+    channels[3, :, :] = state.step / layout.max_steps
     return channels
 
 
@@ -103,11 +97,13 @@ class PolicyValueCNN(nn.Module):
     def __init__(
         self,
         in_channels: int = len(CHANNEL_NAMES),
-        board_size: int = 5,
+        board_width: int = 5,
+        board_height: int = 5,
         trunk_channels: int = 32,
         num_blocks: int = 3,
     ) -> None:
         super().__init__()
+        cells = board_width * board_height
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, trunk_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
@@ -119,13 +115,13 @@ class PolicyValueCNN(nn.Module):
             nn.Conv2d(trunk_channels, 2, kernel_size=1),
             nn.ReLU(inplace=True),
             nn.Flatten(),
-            nn.Linear(2 * board_size * board_size, len(Action)),
+            nn.Linear(2 * cells, len(Action)),
         )
         self.value_head = nn.Sequential(
             nn.Conv2d(trunk_channels, 1, kernel_size=1),
             nn.ReLU(inplace=True),
             nn.Flatten(),
-            nn.Linear(board_size * board_size, 32),
+            nn.Linear(cells, 32),
             nn.ReLU(inplace=True),
             nn.Linear(32, 1),
         )
@@ -144,10 +140,14 @@ class PolicyValueCNN(nn.Module):
 class MCTSNode:
     state: GridWorldState
     terminal: bool
-    prior: np.ndarray = field(default_factory=lambda: np.ones(len(Action)) / len(Action))
+    prior: np.ndarray = field(
+        default_factory=lambda: np.ones(len(Action)) / len(Action)
+    )
     children: dict[int, "MCTSNode"] = field(default_factory=dict)
     N: np.ndarray = field(default_factory=lambda: np.zeros(len(Action), dtype=np.int64))
-    W: np.ndarray = field(default_factory=lambda: np.zeros(len(Action), dtype=np.float64))
+    W: np.ndarray = field(
+        default_factory=lambda: np.zeros(len(Action), dtype=np.float64)
+    )
     expanded: bool = False
     value: float = 0.0  # network value estimate when expanded
 
@@ -190,7 +190,7 @@ class MCTS:
 
     def __init__(
         self,
-        env: GridWorldFuncEnv,
+        env: DeterministicGridWorldEnv,
         params: EmpoParameter,
         net: PolicyValueCNN,
         config: MCTSConfig,
@@ -304,9 +304,7 @@ class MCTS:
             rollout_states = [node.state]
             rollout_actions: list[int] = []
         else:
-            rollout_states, rollout_actions = self._rollout_to_terminal(
-                node.state, rng
-            )
+            rollout_states, rollout_actions = self._rollout_to_terminal(node.state, rng)
 
         # Stitch the tree path with the rollout to get the full trajectory.
         full_states = [p[0].state for p in path] + rollout_states
@@ -345,7 +343,7 @@ def visit_policy(node: MCTSNode, temperature: float) -> np.ndarray:
 
 
 def self_play_episode(
-    env: GridWorldFuncEnv,
+    env: DeterministicGridWorldEnv,
     params: EmpoParameter,
     mcts: MCTS,
     start_state: GridWorldState,
@@ -409,7 +407,9 @@ def train_step(
 ) -> tuple[float, float]:
     feats = torch.from_numpy(np.stack([b.features for b in batch])).to(device)
     target_pi = torch.from_numpy(np.stack([b.policy for b in batch])).float().to(device)
-    target_v = torch.tensor([b.value for b in batch], dtype=torch.float32, device=device)
+    target_v = torch.tensor(
+        [b.value for b in batch], dtype=torch.float32, device=device
+    )
 
     logits, value = net(feats)
     log_p = torch.log_softmax(logits, dim=-1)
@@ -444,7 +444,7 @@ class AlphaZeroConfig:
 class AlphaZeroSolver:
     def __init__(
         self,
-        env: GridWorldFuncEnv,
+        env: DeterministicGridWorldEnv,
         params: EmpoParameter,
         config: AlphaZeroConfig,
         device: Optional[torch.device] = None,
@@ -458,7 +458,8 @@ class AlphaZeroSolver:
         self.rng = np.random.default_rng(seed)
         self.net = PolicyValueCNN(
             in_channels=len(CHANNEL_NAMES),
-            board_size=env.size,
+            board_width=env.width,
+            board_height=env.height,
             trunk_channels=config.trunk_channels,
             num_blocks=config.num_blocks,
         ).to(self.device)

@@ -2,20 +2,20 @@ import numpy as np
 import pytest
 import torch
 
-import grid_world.alphazero as az
+import grid_world as env
 import grid_world.empo_eval as empo_eval
-import grid_world.env as env
-import grid_world.solvino as solvino
+from grid_world.solvers import alphazero as az
+from grid_world.solvers import backward_induction as solvino
 
 
 def _fair_population(size: int):
-    h1 = [(lambda x, i=i: float(x.box[0] <= i)) for i in range(size)]
-    h2 = [(lambda x, i=i: float(x.box[0] >= i)) for i in range(size)]
+    h1 = [(lambda x, i=i: float(x.state.object[0] <= i)) for i in range(size)]
+    h2 = [(lambda x, i=i: float(x.state.object[0] >= i)) for i in range(size)]
     return [h1, h2]
 
 
 def _params():
-    return solvino.EmpoParameter(
+    return env.EmpoParameter(
         gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1
     )
 
@@ -23,8 +23,10 @@ def _params():
 def test_encode_obs_shape_and_planes() -> None:
     size, max_steps = 5, 10
     walls = frozenset({(0, 1), (2, 3)})
-    func_env = env.GridWorldFuncEnv(size, [], max_steps=max_steps, walls=walls)
-    state = env.GridWorldState(agent=(0, 0), target=(2, 3), box=(4, 4), step=5)
+    func_env = env.MovingBoxEnv(
+        env.GridWorldLayout(width=size, height=size, max_steps=max_steps, walls=walls), []
+    )
+    state = env.GridWorldState(robot=(0, 0), object=(4, 4), step=5)
     obs = func_env.observation(state)
     enc = az.encode_obs(obs)
 
@@ -33,22 +35,22 @@ def test_encode_obs_shape_and_planes() -> None:
 
     # One-hot entity planes.
     assert enc[0].sum() == 1.0 and enc[0, 0, 0] == 1.0
-    assert enc[1].sum() == 1.0 and enc[1, 2, 3] == 1.0
-    assert enc[2].sum() == 1.0 and enc[2, 4, 4] == 1.0
+    assert enc[1].sum() == 1.0 and enc[1, 4, 4] == 1.0
 
-    # Wall plane matches `obs.walls` exactly.
-    assert enc[3].sum() == len(walls)
+    # Wall plane matches the layout walls exactly.
+    assert enc[2].sum() == len(walls)
     for (x, y) in walls:
-        assert enc[3, x, y] == 1.0
+        assert enc[2, x, y] == 1.0
 
     # Step plane is constant at step / max_steps.
-    assert np.allclose(enc[4], 5 / 10)
+    assert np.allclose(enc[3], 5 / 10)
 
 
 def test_policy_value_cnn_forward() -> None:
     net = az.PolicyValueCNN(
         in_channels=len(az.CHANNEL_NAMES),
-        board_size=5,
+        board_width=5,
+        board_height=5,
         trunk_channels=8,
         num_blocks=1,
     )
@@ -62,8 +64,11 @@ def test_mcts_finds_optimum_with_random_network() -> None:
     """With many simulations the trajectory-based backup converges to the
     optimal V_r at the root, even with an untrained network."""
     size = 5
-    func_env = env.GridWorldFuncEnv(size, _fair_population(size), max_steps=10)
-    start = env.GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0)
+    func_env = env.MovingBoxEnv(
+        env.GridWorldLayout(width=size, height=size, max_steps=10, walls=frozenset()),
+        _fair_population(size),
+    )
+    start = env.GridWorldState(robot=(0, 0), object=(1, 0), step=0)
     params = _params()
 
     solver = solvino.BackwardInductionSolver(func_env, params)
@@ -106,8 +111,11 @@ def test_visit_policy_normalises() -> None:
 
 def test_self_play_episode_targets_match_evaluator() -> None:
     size = 5
-    func_env = env.GridWorldFuncEnv(size, _fair_population(size), max_steps=10)
-    start = env.GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0)
+    func_env = env.MovingBoxEnv(
+        env.GridWorldLayout(width=size, height=size, max_steps=10, walls=frozenset()),
+        _fair_population(size),
+    )
+    start = env.GridWorldState(robot=(0, 0), object=(1, 0), step=0)
     params = _params()
     cfg = az.AlphaZeroConfig(
         iterations=0,
@@ -130,8 +138,11 @@ def test_alphazero_solver_reaches_optimal_V_r() -> None:
     """End-to-end: after a short training run, AlphaZero's greedy policy
     achieves the optimal V_r given by backward induction."""
     size = 5
-    func_env = env.GridWorldFuncEnv(size, _fair_population(size), max_steps=10)
-    start = env.GridWorldState(agent=(0, 0), target=(0, 0), box=(1, 0), step=0)
+    func_env = env.MovingBoxEnv(
+        env.GridWorldLayout(width=size, height=size, max_steps=10, walls=frozenset()),
+        _fair_population(size),
+    )
+    start = env.GridWorldState(robot=(0, 0), object=(1, 0), step=0)
     params = _params()
 
     exact = solvino.BackwardInductionSolver(func_env, params)
@@ -151,4 +162,4 @@ def test_alphazero_solver_reaches_optimal_V_r() -> None:
     # Tight tolerance: trajectory-eval V_r should match the exact optimum.
     assert traj.V_r[0] == pytest.approx(exact.V_r[start], abs=1e-6)
     # The terminal box should be at the middle row for the fair-box instance.
-    assert traj.states[-1].box[0] == (size - 1) // 2
+    assert traj.states[-1].object[0] == (size - 1) // 2

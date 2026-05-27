@@ -1,28 +1,23 @@
-from dataclasses import dataclass
 import numpy as np
 
-from .env import Action, GridWorldFuncEnv
+from ..base import Action
+from ..empo import EmpoParameter
+from ..env_base import DeterministicGridWorldEnv
 
 
-@dataclass(frozen=True)
-class EmpoParameter:
-    gamma_r: float = 1
-    beta_r: float = 1
-    gamma_h: float = 1
-    zeta: float = 2
-    xi: float = 1
-    eta: float = 1
-
-
-# Special case that solves on a spanning tree
 class BackwardInductionSolver:
+    """
+    Only usable on acyclic environment
+    """
+
     def __init__(
-        self, func_env: GridWorldFuncEnv, params: EmpoParameter = EmpoParameter()
+        self,
+        func_env: DeterministicGridWorldEnv,
+        params: EmpoParameter = EmpoParameter(),
     ):
         self.env = func_env
         self.params = params
 
-        self.in_progress: set = set()
         self.Q_r: dict = {}
         self.robot_policy: dict = {}
         self.V_h: dict = {}
@@ -33,8 +28,6 @@ class BackwardInductionSolver:
     def solve(self, state):
         if state in self.V_r:
             return
-        if state in self.in_progress:
-            return
         if self.env.terminal(state):
             self.V_h[state] = [
                 [0.0] * len(human_goals) for human_goals in self.env.population
@@ -42,33 +35,20 @@ class BackwardInductionSolver:
             self.V_r[state] = 0.0
             return
 
-        self.in_progress.add(state)
-
         actions = list(Action)
-        valid_actions = []
         for action in actions:
             next_state = self.env.transition(state, action)
-            if next_state in self.in_progress:
-                continue
             self.solve(next_state)
-            if next_state in self.V_r:
-                valid_actions.append(action)
-
-        if not valid_actions:
-            # All paths from here close a cycle; leave V_r unset so the
-            # caller drops the action that led here. A different ancestor
-            # may still reach `state` via a non-cycling route later.
-            return
 
         # Q_r
         q_values = [
             self.params.gamma_r * self.V_r[self.env.transition(state, a)]
-            for a in valid_actions
+            for a in actions
         ]
-        self.Q_r[state] = dict(zip(valid_actions, q_values))
+        self.Q_r[state] = dict(zip(actions, q_values))
 
-        # (5) robot policy
-        best_action = valid_actions[int(np.argmax(q_values))]
+        # robot policy
+        best_action = actions[int(np.argmax(q_values))]
         self.robot_policy[state] = best_action
 
         next_state = self.env.transition(state, best_action)
@@ -94,5 +74,3 @@ class BackwardInductionSolver:
 
         # V_r
         self.V_r[state] = self.U_r[state] + self.Q_r[state][best_action]
-
-        self.in_progress.remove(state)

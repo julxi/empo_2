@@ -1,7 +1,7 @@
 // Shared style and helpers for Empo math documents.
 
 #let setup(body) = {
-  set page(fill: rgb("#1e1e1e"))
+  set page(fill: rgb("#1e1e1e"), height: auto)
   set text(lang: "en", fill: rgb("#e0e0e0"), size: 14pt)
   set math.equation(numbering: "(1)")
   body
@@ -19,3 +19,13 @@
   #set math.equation(numbering: none)
   #body
 ]
+
+#let titled(name, body) = block(
+  spacing: 1.5em,
+  breakable: false,
+  {
+    block(below: 0.5em,
+      text(size: 1em, fill: rgb("#a0a0a0"), style: "italic", name + ":"))
+    body
+  },
+)
