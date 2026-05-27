@@ -26,7 +26,7 @@ from grid_world import (
     MovingBoxEnv,
 )
 
-from _common import Instance, solve_and_rollout
+from _common import Instance, at_terminal, solve_and_rollout
 
 
 SIZE = 4
@@ -50,14 +50,14 @@ START = GridWorldState(robot=(1, 3), object=(1, 2), step=0)
 
 def make_population():
     human_1 = [
-        lambda o: float(o.state.robot == TARGET),
-        lambda o: float(o.state.object == (0, 3)),
-        lambda o: float(o.state.object == (1, 3)),
-        lambda o: float(o.state.object in {(0, 2), (1, 2), (2, 2)}),
-        lambda o: float(o.state.object in {(1, 2), (2, 2)}),
-        lambda o: float(o.state.object in {(1, 2), (2, 2)}),
-        lambda o: float(o.state.object in {(1, 2), (2, 2), (3, 2)}),
-        lambda o: float(o.state.object == (1, 1)),
+        lambda o: float(at_terminal(o) and o.state.robot == TARGET),
+        lambda o: float(at_terminal(o) and o.state.object == (0, 3)),
+        lambda o: float(at_terminal(o) and o.state.object == (1, 3)),
+        lambda o: float(at_terminal(o) and o.state.object in {(0, 2), (1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2), (3, 2)}),
+        lambda o: float(at_terminal(o) and o.state.object == (1, 1)),
     ]
     return [human_1]
 

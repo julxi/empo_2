@@ -1,10 +1,8 @@
 """Trajectory-based evaluation of the simplified Empo equations.
 
 Given a deterministic policy (or just a trajectory of actions), compute
-V_h, X_h, U_r and V_r at every state along the trajectory. This matches
-the convention used by `BackwardInductionSolver`: U_h is non-zero only at
-terminal states (reflected via `env.reward`), V_h at the terminal state is 0,
-and V_h(s_t) accumulates rewards backwards from terminal.
+V_h, X_h, U_r and V_r at every state along the trajectory. Mirrors
+``BackwardInductionSolver``
 
 Useful for two purposes:
 - A reference implementation that any policy (not just the optimal one) can be
@@ -70,11 +68,15 @@ def evaluate_trajectory(
     V_h: list[list[list[float]]] = [
         [[0.0] * len(goals) for goals in pop] for _ in range(N + 1)
     ]
+    V_h[N] = env.goal_values(states[N])
     for t in range(N - 1, -1, -1):
-        rewards = env.reward(states[t], actions[t], states[t + 1])
+        gv = env.goal_values(states[t])
         for h, goals in enumerate(pop):
             for j in range(len(goals)):
-                V_h[t][h][j] = rewards[h][j] + params.gamma_h * V_h[t + 1][h][j]
+                g_here = gv[h][j]
+                V_h[t][h][j] = (
+                    g_here if g_here > 0 else params.gamma_h * V_h[t + 1][h][j]
+                )
 
     X_h: list[list[float]] = [
         [sum(v**params.zeta for v in V_h[t][h]) for h in range(len(pop))]

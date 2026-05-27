@@ -8,8 +8,14 @@ from grid_world.solvers import backward_induction as solvino
 
 
 def _fair_population(size: int):
-    human_1 = [(lambda x, i=i: float(x.state.object[0] <= i)) for i in range(size)]
-    human_2 = [(lambda x, i=i: float(x.state.object[0] >= i)) for i in range(size)]
+    human_1 = [
+        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] <= i))
+        for i in range(size)
+    ]
+    human_2 = [
+        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] >= i))
+        for i in range(size)
+    ]
     return [human_1, human_2]
 
 

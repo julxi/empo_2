@@ -32,11 +32,7 @@ class StochasticBackwardInductionSolver:
         if state in self.V_r:
             return
         if self.env.terminal(state):
-            obs = self.env.observation(state)
-            self.V_h[state] = [
-                [goal(obs) for goal in human_goals]
-                for human_goals in self.env.population
-            ]
+            self.V_h[state] = self.env.goal_values(state)
             self.V_r[state] = 0.0
             return
 
@@ -64,13 +60,12 @@ class StochasticBackwardInductionSolver:
 
         next_states, probs = distributions[best_action]
 
-        # V_h: 1 if s in g_h, else gamma_h * E[V_h(next)]
-        obs = self.env.observation(state)
+        # V_h
+        gv = self.env.goal_values(state)
         v_h_state = []
-        for h, human_goals in enumerate(self.env.population):
+        for h, human_gv in enumerate(gv):
             row = []
-            for g_idx, goal in enumerate(human_goals):
-                g_here = goal(obs)
+            for g_idx, g_here in enumerate(human_gv):
                 if g_here > 0:
                     row.append(g_here)
                 else:

@@ -9,8 +9,14 @@ from grid_world.solvers import backward_induction as solvino
 
 
 def _fair_population(size: int):
-    h1 = [(lambda x, i=i: float(x.state.object[0] <= i)) for i in range(size)]
-    h2 = [(lambda x, i=i: float(x.state.object[0] >= i)) for i in range(size)]
+    h1 = [
+        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] <= i))
+        for i in range(size)
+    ]
+    h2 = [
+        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] >= i))
+        for i in range(size)
+    ]
     return [h1, h2]
 
 

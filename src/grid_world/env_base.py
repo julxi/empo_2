@@ -1,6 +1,6 @@
 """Abstract base classes for gridworld environments.
 
-Shared boilerplate (observation wrapping, terminal-only goal evaluation, default
+Shared boilerplate (observation wrapping, per-state goal evaluation, default
 ``state_info`` / ``transition_info``) lives on :class:`GridWorldEnv`. Concrete
 envs subclass either :class:`DeterministicGridWorldEnv` (a pure-function
 ``transition``) or :class:`StochasticGridWorldEnv` (``transition`` samples via
@@ -8,6 +8,10 @@ envs subclass either :class:`DeterministicGridWorldEnv` (a pure-function
 distinction is encoded as separate types so solvers that only work on
 deterministic dynamics (backward induction, AlphaZero MCTS as currently
 written) can declare that in their signatures.
+
+Goals are evaluated *per state* via :meth:`GridWorldEnv.goal_values`, matching
+the state-based formalism in ``math/2_deterministic.typ``. Gymnasium's
+transition-based ``reward(s, a, s')`` is not used.
 """
 
 from typing import Any
@@ -59,17 +63,8 @@ class GridWorldEnv(
     ) -> GridWorldObs:
         return GridWorldObs(layout=self.layout, state=state)
 
-    def reward(
-        self,
-        state: GridWorldState,
-        action: int,
-        next_state: GridWorldState,
-        rng: Any = None,
-        params: Any = None,
-    ) -> Rewards:
-        if not self.terminal(next_state, rng, params):
-            return [[0.0] * len(human_goals) for human_goals in self.population]
-        obs = self.observation(next_state)
+    def goal_values(self, state: GridWorldState) -> Rewards:
+        obs = self.observation(state)
         return [[goal(obs) for goal in human_goals] for human_goals in self.population]
 
     def terminal(
@@ -91,22 +86,11 @@ class GridWorldEnv(
 
 
 class DeterministicGridWorldEnv(GridWorldEnv):
-    """``transition`` is a pure function of ``(state, action)``.
-
-    Theory behind these environments: see 2_deterministic.typ
-
-    Solvers that rely on this (backward induction over the state graph, MCTS
-    with a single child per action) should type their env argument with this
-    class.
-    """
+    """``transition`` is a pure function of ``(state, action)``."""
 
 
 class StochasticGridWorldEnv(GridWorldEnv):
-    """``transition`` samples via ``rng``; ``distribution`` exposes the law.
-
-    The full categorical distribution over next states is required by exact
-    solvers (value iteration, stochastic backward induction).
-    """
+    """``transition`` samples via ``rng``; ``distribution`` exposes the dynamics."""
 
     def distribution(
         self, state: GridWorldState, action: int

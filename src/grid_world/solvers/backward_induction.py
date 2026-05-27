@@ -28,13 +28,13 @@ class BackwardInductionSolver:
     def solve(self, state):
         if state in self.V_r:
             return
+
         if self.env.terminal(state):
-            self.V_h[state] = [
-                [0.0] * len(human_goals) for human_goals in self.env.population
-            ]
+            self.V_h[state] = self.env.goal_values(state)
             self.V_r[state] = 0.0
             return
 
+        # recursive compute successor states
         actions = list(Action)
         for action in actions:
             next_state = self.env.transition(state, action)
@@ -53,14 +53,14 @@ class BackwardInductionSolver:
 
         next_state = self.env.transition(state, best_action)
 
-        # V_h
-        rewards = self.env.reward(state, best_action, next_state)
+        # V_h: 1 if s in g_h, else gamma_h * V_h(next)
+        gv = self.env.goal_values(state)
         self.V_h[state] = [
             [
-                r + self.params.gamma_h * v_next
-                for r, v_next in zip(human_rewards, human_v_next)
+                g_here if g_here > 0 else self.params.gamma_h * v_next
+                for g_here, v_next in zip(human_gv, human_v_next)
             ]
-            for human_rewards, human_v_next in zip(rewards, self.V_h[next_state])
+            for human_gv, human_v_next in zip(gv, self.V_h[next_state])
         ]
 
         # X_h

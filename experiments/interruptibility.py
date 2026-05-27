@@ -40,7 +40,7 @@ from grid_world.solvers.stochastic_backward_induction import (
     StochasticBackwardInductionSolver,
 )
 
-from _common import Instance
+from _common import Instance, at_terminal
 
 WIDTH = 4
 HEIGHT = 3
@@ -59,14 +59,14 @@ SWITCH_IDX = 1
 
 def reach_goal_goal():
     def g(obs: GridWorldObs) -> float:
-        return float(obs.state.robot == GOAL)
+        return float(at_terminal(obs) and obs.state.robot == GOAL)
 
     return g
 
 
 def switch_unused_goal():
     def g(obs: GridWorldObs) -> float:
-        return float(not obs.state.button_states[SWITCH_IDX])
+        return float(at_terminal(obs) and not obs.state.button_states[SWITCH_IDX])
 
     return g
 

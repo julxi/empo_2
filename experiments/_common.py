@@ -26,14 +26,22 @@ class Instance:
     start: GridWorldState
 
 
+def at_terminal(obs: GridWorldObs) -> bool:
+    return obs.state.step >= obs.layout.max_steps
+
+
 def make_above_below_goal(row: int, above: bool):
-    """1 iff the object's y-coordinate is on the requested side of ``row``."""
+    """1 iff at the terminal state the object's y-coordinate is on the requested side of ``row``."""
     if above:
+
         def g(obs: GridWorldObs) -> float:
-            return float(obs.state.object[0] <= row)
+            return float(at_terminal(obs) and obs.state.object[0] <= row)
+
     else:
+
         def g(obs: GridWorldObs) -> float:
-            return float(obs.state.object[0] >= row)
+            return float(at_terminal(obs) and obs.state.object[0] >= row)
+
     return g
 
 
@@ -45,16 +53,20 @@ def fair_box_population(rows: int) -> Population:
 
 
 def survival_goal(human_button_idx: int):
-    """1 iff the button at ``human_button_idx`` is still pressed (True)."""
+    """1 iff at the terminal state the button at ``human_button_idx`` is still pressed (True)."""
+
     def g(obs: GridWorldObs) -> float:
-        return float(obs.state.button_states[human_button_idx])
+        return float(at_terminal(obs) and obs.state.button_states[human_button_idx])
+
     return g
 
 
 def switch_unpressed_goal(switch_button_idx: int = 0):
-    """1 iff the switch button has not been pressed."""
+    """1 iff at the terminal state the switch button has not been pressed."""
+
     def g(obs: GridWorldObs) -> float:
-        return float(obs.state.button_states[switch_button_idx])
+        return float(at_terminal(obs) and obs.state.button_states[switch_button_idx])
+
     return g
 
 
