@@ -2,14 +2,11 @@
 #import "util.typ": *
 #show: setup
 
-= Simplified case: greedy robot, deterministic environment
+= Simplified case: greedy roboti in deterministic environment
 
 Make everything deterministic to simplify the equations:
-- environment dynamic:
-  - deterministic
-  - goal independent
-  - So we have a transition function $T(s, a)$
-- greedy robot: deterministic policy $π_r (s)$ (also easier to reason about in general)
+- environment goal indepentend and deterministic, so we have a transition _function_ $T(s,a)$
+- robot is greedy, so we have a policy selection function $π_r (s)$
 
 
 
@@ -29,7 +26,10 @@ $ V_r (s) <- U_r (s) + Q_r (s, π_r (s)) $ <eq-Vr>
 
 == RL-like formulation
 
-We can rearrange the equations into two parts -- a utility component and an RL component. This formulation is less convenient for implementation but looks nice theoretically.
+We can rearrange the equations into two parts -- a utility component and an RL component.
+This rearrangement highlights the similarity to reinforcement learning.
+The 3 RL equations look algebraicaly exactly like the Bellmann equations,
+except of course that the utility function $U_r$ in endogenous, i.e., $U_r$ depends on $π_r$.
 
 *Utility* (unchanged):
 
@@ -61,7 +61,7 @@ $ V_r (s_i) = (N - i + 1) dot.c U_r (s_N). $ <eq-Vr-unrolled>
 Note that $U_r < 0$ and values closer to zero are better. So a policy that creates shorter trajectories with same terminal $U_r (s_N)$ performs better. If all episodes have equal length then relative performance between policies only depends on $U_r (s_N)$.
 
 
-== Precise Solution
+== Computational Solutions
 
 If the environment is acyclic we can use backwards induction. We can just recursively evaluate @eq-Qr -- @eq-Vr in their order.
 
@@ -73,7 +73,7 @@ We can solve some cyclic environments explicitly if
 In this case $V_r (s)$ only depends on the terminal state reached by the policy and the length of the trajectory it creates, so a backwards induction would need to take length into account.
 
 
-== Analytic Solutions
+== Examples with Analytical Solutions
 
 === Trolley Problem
 

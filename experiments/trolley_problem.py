@@ -103,7 +103,7 @@ def main() -> None:
     parser.add_argument("--switch-goal-mult", type=int, default=0)
     args = parser.parse_args()
 
-    params = EmpoParameter(gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1)
+    params = EmpoParameter()
 
     layout, population, start = build_trolley(
         if_pressed=args.if_pressed,

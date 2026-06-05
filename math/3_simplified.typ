@@ -5,8 +5,8 @@
 = Simplified case: greedy robot, goal independent environment
 
 Key simplifications:
-- $T(s,a_r,g)$ is goal independent
-- robot policy deterministic (greedy)
+- $T(s,a_r,g)$ is goal independent, so it's just $T(s,a_r)$
+- robot policy deterministic (greedy), so it's just an action-selection function $π(s)$
 
 This is very similar to #link("2_deterministic.typ")[the deterministic case], but the environment dynamic may be stochastic.
 

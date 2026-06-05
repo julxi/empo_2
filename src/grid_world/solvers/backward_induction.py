@@ -7,7 +7,8 @@ from ..env_base import DeterministicGridWorldEnv
 
 class BackwardInductionSolver:
     """
-    Only usable on acyclic environment
+    Backward induction solver for the acyclic, determinstic environments.
+    (see `math/2_deterministic.typ` for theory).
     """
 
     def __init__(
@@ -34,7 +35,7 @@ class BackwardInductionSolver:
             self.V_r[state] = 0.0
             return
 
-        # recursive compute successor states
+        # recursively compute successor states
         actions = list(Action)
         for action in actions:
             next_state = self.env.transition(state, action)
@@ -53,7 +54,7 @@ class BackwardInductionSolver:
 
         next_state = self.env.transition(state, best_action)
 
-        # V_h: 1 if s in g_h, else gamma_h * V_h(next)
+        # V_h
         gv = self.env.goal_values(state)
         self.V_h[state] = [
             [
