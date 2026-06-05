@@ -2,6 +2,8 @@
 #import "util.typ": *
 #show: setup
 
+#set heading(numbering: "1.")
+
 = Simplified case: greedy roboti in deterministic environment
 
 Make everything deterministic to simplify the equations:
@@ -45,17 +47,21 @@ except of course that the utility function $U_r$ in endogenous, i.e., $U_r$ depe
 
 The starred versions are related to the originals by $V^*_r = V_r$ and $Q^*_r = Q_r + U_r$; the rearrangement is purely to emphasise the RL character.
 
-== Compounding $U_r$ and pressure for shorter episodes
+== Only Terminal Goals <sec-only-terminal-goals>
 
-Assume that every $g_h$ contains only terminal states, and additionally that $γ_h = γ_r = 1$.
+We call a goal $g_h$ a terminal goal is if only contains terminal states.
+In this section we show that if all goals are terminal and there's no discounting the robots $U_r$ only depends on the reached terminal goal and $V_r$ factorises in a terminal goal dependent component and a length component.
 
-Consider a solution and its trajectory of the deterministic policy $π_r$ from the starting state $s_0$.
-$V_h (dot, g_h)$ is constant on that trajectory since $V_h (s_i, g_h) = V_h (s_(i+1), g_h)$ for all non-terminal states. Then $X_h$ and $U_r$ are also constant on the trajectory.
-Note that we can write
+
+So, assume that every $g_h$ contains only terminal states, and additionally that $γ_h = γ_r = 1$.
+Consider a solution and the trajectory $(s_1,...s_N)$ of its deterministic policy $π_r$ from the starting state $s_0$.
+$V_h (dot, g_h)$ is constant on that trajectory since $V_h (s_i, g_h) = V_h (s_(i+1), g_h)$ for non-terminal states in our case due to  @eq-Vh. From this we get that also $X_h$ and $U_r$ are constant on the trajectory.
+From @eq-Qr and @eq-Vr we get (generally)
 
 $ V_r (s) <- U_r (s) + γ_r V_r (T(s, π_r (s))) $ <eq-Vr-recursive>
 
-Let $N$ denote the trajectory length and $s_N$ its terminal state. Then $V_r (s_i) = U_r (s_i) + V_r (s_(i+1))$, and unrolling gives
+In our case this becomes
+
 $ V_r (s_i) = (N - i + 1) dot.c U_r (s_N). $ <eq-Vr-unrolled>
 
 Note that $U_r < 0$ and values closer to zero are better. So a policy that creates shorter trajectories with same terminal $U_r (s_N)$ performs better. If all episodes have equal length then relative performance between policies only depends on $U_r (s_N)$.
@@ -79,113 +85,94 @@ In this case $V_r (s)$ only depends on the terminal state reached by the policy 
 
 The trolley problem captures a classic ethical dilemma: given mutually exclusive
 goals (saving different groups of humans), whose goals should be followed, and
-how is the trade-off shifted by an additional preference for inactivity?
+how is the trade-off shifted by a socially preference for certain behaviours?
 
-We work out the terminal utility $U_r (s_N)$ for the environment implemented in
-[`experiments/trolley_problem.py`](../experiments/trolley_problem.py).
+#heading(numbering: none, level:4)[Setup]
 
-==== Setup
+- Robot has two actions $a ∈ {0,1}$ (inaction and action)
+- $n_0$ -- number of people affacted if passive
+- $n_1$ -- number of poeple affected if active
+- $m_s$ -- survival goals per human
+- $m_0$ -- passivity goals per human
 
-Let
-- $n_p$ -- number of humans in the *if-pressed* column, killed when the robot presses the switch and the train deflects,
-- $n_u$ -- number of humans in the *if-unpressed* column, killed when the switch is left alone and the train falls straight down,
-- $m_s$ -- multiplicity of the per-human survival goal,
-- $m_w$ -- multiplicity of the (shared) switch-unpressed goal.
-
-Total humans $H = n_p + n_u$. We fix the Empo parameters
+Total humans $H = n_0 + n_1$. We fix the Empo parameters
 $ γ_r = γ_h = 1, quad ζ = 2, quad ξ = 1, quad η = 1. $ <eq-trolley-params>
 
 All trajectories have equal length and end in one of two terminal states,
-distinguished by the indicator $W in {0, 1}$:
-- $W = 1$ -- switch *unpressed* (inaction): train falls straight, kills the $n_u$ if-unpressed humans,
-- $W = 0$ -- switch *pressed* (action): train deflects, kills the $n_p$ if-pressed humans.
+depending on $a$:
+- $a = 0$ -- inaction: train kills the $n_0$ humans,
+- $a = 1$ -- action: train kills the $n_1$ humans.
 
-Each human $h$ shares the same goal list, consisting of three primitives:
-+ a constant baseline $g^0 equiv 1$ (always satisfied),
+Each human $h$ has three types of terminal goals:
++ a constant baseline $g equiv 1$ (always satisfied),
 + $m_s$ copies of the *survival goal* $g^"surv"_h (s) = bb(1)[h "alive in" s]$,
-+ $m_w$ copies of the *switch-unpressed goal* $g^"sw" (s) = bb(1)[s "has switch unpressed"]$.
++ $m_0$ copies of the *switch-unpressed goal* $g^0 (s) = bb(1)["robot stayed passive"]$.
 
-Let $S_h in {0, 1}$ be the survival indicator of human $h$ at $s_N$. Since
-$γ_h = 1$ and all goals are terminal-state goals, the per-goal values from
-@eq-Vh collapse along the trajectory to their indicators at $s_N$:
-$ V_h (s_N, g^0) = 1, quad V_h (s_N, g^"surv"_h) = S_h, quad V_h (s_N, g^"sw") = W. $
+#heading(numbering: none, level:4)[Solution]
 
-==== $X_h$ at the terminal
+To find a solution for the empo equations, i.e., figuring out which actions the empo-bot will take, we simply have to minimise $U_r$ at the terminal states (see @sec-only-terminal-goals).
 
-Applying @eq-Xh with $ζ = 2$ and using $S_h^2 = S_h$, $W^2 = W$ since both are binary:
+Let $S_h in {0, 1}$ be the survival indicator of human $h$ at $s_N$. Then the $V_h$ at $s_N$ are
+$ V_h (s_N, g) = 1, quad V_h (s_N, g^"surv"_h) = S_h, quad V_h (s_N, g^0) = (1-a). $
+Applying @eq-Xh with $ζ = 2$ and using $S_h^2 = S_h$, $(1-a)^2 = a$ since both are binary:
 
-$ X_h (s_N) = 1 + m_s S_h + m_w W. $ <eq-trolley-X>
+$ X_h (s_N) = 1 + m_s S_h + m_0 (1-a). $ <eq-trolley-X>
 
-==== $U_r$ at the terminal
+From this we can get $U_r$ (for $ξ = η = 1$):
 
-Applying @eq-Ur with $ξ = η = 1$:
+$ U_r (s_N) = - sum_(h = 1)^(H) (X_h (s_N))^(-1) = - sum_h 1/(1 + m_s S_h + m_0 (1-a)). $ <eq-trolley-U>
 
-$ U_r (s_N) = - sum_(h = 1)^(H) (X_h (s_N))^(-1) = - sum_h 1/(1 + m_s S_h + m_w W). $ <eq-trolley-U>
+Splitting the sum by which group of humans got killed we get:
 
-Splitting the sum by which column the human is in:
+- switch unpressed ($a = 0$):
+  The $n_0$ humans die; the $n_1$ humans survive:
+  $ U_0 = U_r (s_N | a = 0) = - n_0/(1 + m_0) - n_1/(1 + m_s + m_0) . $ <eq-trolley-Uu>
+- switch pressed ($a = 1$).
+  The $n_1$ humans die; the $n_0$ humans survive:
+  $ U_1 = U_r (s_N | a = 1) = - n_0/(1+m_s) - n_1. $ <eq-trolley-Up>
 
-*Case A -- switch unpressed ($W = 1$).*
-The $n_u$ if-unpressed humans die ($S_h = 0$); the $n_p$ if-pressed humans survive ($S_h = 1$):
-$ U_r^"unpressed" = - n_p/(1 + m_s + m_w) - n_u/(1 + m_w). $ <eq-trolley-Uu>
+Now the robot will just take whichever action results in a higher $U_r$.
 
-*Case B -- switch pressed ($W = 0$).*
-The $n_p$ if-pressed humans die; the $n_u$ if-unpressed humans survive:
-$ U_r^"pressed" = - n_p - n_u/(1 + m_s). $ <eq-trolley-Up>
 
-==== Decision criterion
+#heading(numbering: none, level:4)[Examples]
 
-*Proposition.* Under the parameter choice @eq-trolley-params and with equal
-trajectory length on both branches, the robot presses the switch if and only if
-$ n_p + n_u/(1 + m_s) < n_p/(1 + m_s + m_w) + n_u/(1 + m_w). $ <eq-trolley-decision>
+We consider two versions of the trolley problem:
 
-*Proof.* The two branches share the same trajectory length $N$, and $U_r$ is
-constant along the trajectory (every goal is a terminal-state goal and
-$γ_h = 1$), so by @eq-Vr-unrolled
-#unnumbered($ V_r (s_0) = N dot.c U_r (s_N) $)
-on both branches. Since $U_r < 0$, the branch with the larger (closer to zero)
-$U_r (s_N)$ has the larger $V_r (s_0)$, and $π_r$ selects it via @eq-pir. The
-robot therefore presses iff $U_r^"pressed" > U_r^"unpressed"$; substituting
-@eq-trolley-Up and @eq-trolley-Uu and clearing the minus signs gives
-@eq-trolley-decision. #h(1fr) $square$
+- version 1: $n_p = 1, n_u = 3, m_s = 1, m_w = 0$.
+- version 2: $n_p = 1, n_u = 3, m_s = 1, m_w = 1$.
 
-==== Worked examples
+(I think of them as two different types, the first one is maybe best expressed that there is no human preference for the robot action, the second one, there is a preference)
 
-*Script defaults: $n_p = 1, n_u = 3, m_s = 1, m_w = 0$.*
+#unnumbered($ U_0^"version 1" = -1/2 - 3 = -3.5, quad U_1^"version 1" = -1 - 3/2 = -2.5. $)
 
-#unnumbered($ U_r^"unpressed" = -1/2 - 3 = -3.5, quad U_r^"pressed" = -1 - 3/2 = -2.5. $)
+The robot takes an action ($-2.5 > -3.5$).
 
-The robot presses ($-2.5 > -3.5$): one death is preferred to three.
 
-*Switching on the inactivity preference: $n_p = 1, n_u = 3, m_s = 1, m_w = 1$.*
 
-#unnumbered($ U_r^"unpressed" = -1/3 - 3/2 = -11/6 approx -1.833, quad U_r^"pressed" = -1 - 3/2 = -2.5. $)
+#unnumbered($ U_0^"version 2" = -1/3 - 3/2 = -11/6 approx -1.833, quad U_1^"version 2" = -1 - 3/2 = -2.5. $)
 
-Now the robot *refuses* to press: the shared preference "switch should stay unpressed" outweighs the lives saved.
+The robot takes no action
 
-==== When does survival win back? — finishing the derivation
+#heading(numbering: none, level:4)[Decision Boundaries]
 
-Fix $m_w = 1, n_p = 1, n_u = 3$ as above, and ask: for which survival
-multiplicity $m_s$ does the robot return to pressing? Specialising
-@eq-trolley-decision gives
-$ 1 + 3/(1 + m_s) < 1/(2 + m_s) + 3/2. $
+We derived that the robot takes the action if $U_0 < U_1$.
 
-Rearranging,
-#unnumbered($ 3/(1 + m_s) - 1/(2 + m_s) < 1/2 quad <==> quad (5 + 2 m_s)/((1 + m_s)(2 + m_s)) < 1/2, $)
+$  - n_0/(1 + m_0) - n_1/(1 + m_s + m_0) < - n_0/(1+m_s) - n_1 $
 
-which clears to the quadratic
-#unnumbered($ m_s^2 - m_s - 8 > 0 quad <==> quad m_s > (1 + sqrt(33))/2 approx 3.37. $)
+Rearranging gives
 
-So the robot presses iff $m_s >= 4$ (in integer multiplicities). A sanity
-check at the boundary:
+$   n_0 ((m_s - m_0)/((1 + m_0)(1+m_s)))  >  n_1 ((m_s + m_0)/(1 + m_s + m_0)) $ <eq-action-condition>
 
-- $m_s = 3$: $quad U_r^"unpressed" = -1/5 - 3/2 = -17/10, quad U_r^"pressed" = -1 - 3/4 = -7/4$. Since $-17/10 > -7/4$, *don't press*.
-- $m_s = 4$: $quad U_r^"unpressed" = -1/6 - 3/2 = -10/6, quad U_r^"pressed" = -1 - 3/5 = -8/5$. Since $-8/5 > -10/6$, *press*.
+We can solve this easily for a condition on $n_1 / n_0$:
 
-More generally, writing @eq-trolley-decision as
-#unnumbered($ n_p dot (m_s + m_w)/(1 + m_s + m_w) < n_u dot (m_s - m_w)/((1 + m_s)(1 + m_w)), $)
 
-the right-hand side is positive only when $m_s > m_w$, so the survival goal
-must outweigh the inactivity goal *per copy* before any sacrifice in service
-of more lives becomes possible. When $m_s = m_w$ the robot never presses,
-regardless of how many lives are at stake -- a sharp threshold rather than a
-trade-off.
+$   n_1 / n_0 <  ((m_s - m_0)(1 + m_s + m_0))/((m_s + m_0)(1 + m_0)(1+m_s)) $
+
+This can be read as "given $m_s$ and $m_0$ how has the ration $n_1 / n_0$ be so that the robot takes action". We can read of some siple things:
+- if $m_0 = 0$ then $n_1 / n_0 < 1$, i.e., robot takes action if $n_1 < n_0$. Which makes sense
+- if $m_0 > m_s$ this would require $n_1 / n_0 < 0$, which is not possible so robot doesn't take action.
+
+We can also consider @eq-action-condition for the limit case $m_s -> oo$, which means there is some value for $m_s$ that lets the robot take action. The condition is
+$ n_0 1/(1+m_0) > n_1 $
+or equivalently
+$ m_0 < n_0/n_1 - 1 $
