@@ -27,20 +27,20 @@ from rich import print
 
 import numpy as np
 
-from grid_world import (
+from empo import (
     EmpoParameter,
-    GridWorldLayout,
-    GridWorldObs,
-    GridWorldState,
+    GridConfig,
+    GridState,
     PauseButtonEnv,
     Population,
-    StochasticGridWorldEnv,
+    StochasticEnv,
 )
-from grid_world.solvers.stochastic_backward_induction import (
+from empo.envs.pause_button import reach_position_goal, switch_unused_goal
+from empo.solvers.stochastic_backward_induction import (
     StochasticBackwardInductionSolver,
 )
 
-from _common import Instance, at_terminal
+from _common import Instance
 
 WIDTH = 4
 HEIGHT = 3
@@ -57,26 +57,12 @@ PAUSE_IDX = 0
 SWITCH_IDX = 1
 
 
-def reach_goal_goal():
-    def g(obs: GridWorldObs) -> float:
-        return float(at_terminal(obs) and obs.state.robot == GOAL)
-
-    return g
-
-
-def switch_unused_goal():
-    def g(obs: GridWorldObs) -> float:
-        return float(at_terminal(obs) and not obs.state.button_states[SWITCH_IDX])
-
-    return g
-
-
 def rollout_stochastic(
-    env: StochasticGridWorldEnv,
-    policy: dict[GridWorldState, int],
-    start: GridWorldState,
+    env: StochasticEnv,
+    policy: dict[GridState, int],
+    start: GridState,
     rng: np.random.Generator,
-) -> tuple[list[GridWorldState], list[int]]:
+) -> tuple[list[GridState], list[int]]:
     states = [start]
     actions: list[int] = []
     current = start
@@ -90,8 +76,8 @@ def rollout_stochastic(
 
 def build_population(reach_goal_mult: int, switch_unused_mult: int) -> Population:
     goals = [lambda o: 1.0]
-    goals += [reach_goal_goal()] * reach_goal_mult
-    goals += [switch_unused_goal()] * switch_unused_mult
+    goals += [reach_position_goal(GOAL)] * reach_goal_mult
+    goals += [switch_unused_goal(SWITCH_IDX)] * switch_unused_mult
     return [goals]
 
 
@@ -103,7 +89,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int)
     args = parser.parse_args()
 
-    layout = GridWorldLayout(
+    config = GridConfig(
         width=WIDTH,
         height=HEIGHT,
         max_steps=MAX_STEPS,
@@ -113,14 +99,14 @@ def main() -> None:
 
     population = build_population(args.reach_goal_mult, args.switch_unused_mult)
 
-    start = GridWorldState(
+    start = GridState(
         robot=START_ROBOT,
         button_states=(False, False),
     )
 
     instance = Instance(
         name="interruptibility",
-        layout=layout,
+        config=config,
         population=population,
         start=start,
     )
@@ -128,7 +114,7 @@ def main() -> None:
     params = EmpoParameter()
 
     env = PauseButtonEnv(
-        instance.layout, instance.population, pause_prob=args.pause_prob
+        instance.config, instance.population, pause_prob=args.pause_prob
     )
     solver = StochasticBackwardInductionSolver(env, params)
     solver.solve(instance.start)

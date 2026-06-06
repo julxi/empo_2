@@ -4,14 +4,15 @@ import argparse
 
 from rich import print
 
-from grid_world import (
+from empo import (
     EmpoParameter,
-    GridWorldLayout,
-    GridWorldState,
+    GridConfig,
+    GridState,
     MovingBoxEnv,
 )
+from empo.envs.moving_box import fair_box_population
 
-from _common import Instance, fair_box_population, solve_and_rollout
+from _common import Instance, solve_and_rollout
 
 
 def main() -> None:
@@ -24,7 +25,7 @@ def main() -> None:
 
     instance = Instance(
         name="box_to_middle",
-        layout=GridWorldLayout(
+        config=GridConfig(
             width=args.size,
             height=args.size,
             max_steps=args.steps,
@@ -32,10 +33,10 @@ def main() -> None:
             buttons=(),
         ),
         population=fair_box_population(args.size),
-        start=GridWorldState(robot=(0, 0), object=(1, 0)),
+        start=GridState(robot=(0, 0), objects=((1, 0),)),
     )
 
-    env = MovingBoxEnv(instance.layout, instance.population)
+    env = MovingBoxEnv(instance.config, instance.population)
     states, _actions = solve_and_rollout(env, instance.start, params)
     print(states[-1])
 

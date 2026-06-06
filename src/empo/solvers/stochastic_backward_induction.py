@@ -1,8 +1,7 @@
 import numpy as np
 
-from ..base import Action
-from ..empo import EmpoParameter
-from ..env_base import StochasticGridWorldEnv
+from ..params import EmpoParameter
+from ..core import StochasticEnv
 
 
 class StochasticBackwardInductionSolver:
@@ -15,7 +14,7 @@ class StochasticBackwardInductionSolver:
 
     def __init__(
         self,
-        func_env: StochasticGridWorldEnv,
+        func_env: StochasticEnv,
         params: EmpoParameter = EmpoParameter(),
     ):
         self.env = func_env
@@ -36,7 +35,7 @@ class StochasticBackwardInductionSolver:
             self.V_r[state] = 0.0
             return
 
-        actions = list(Action)
+        actions = list(range(self.env.action_space.n))
         distributions = {}
         for action in actions:
             next_states, probs = self.env.distribution(state, action)

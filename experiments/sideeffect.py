@@ -20,13 +20,14 @@ from __future__ import annotations
 
 from rich import print
 
-from grid_world import (
-    GridWorldLayout,
-    GridWorldState,
+from empo import (
+    GridConfig,
+    GridState,
     MovingBoxEnv,
+    at_terminal,
 )
 
-from _common import Instance, at_terminal, solve_and_rollout
+from _common import Instance, solve_and_rollout
 
 
 SIZE = 4
@@ -45,19 +46,19 @@ WALLS: frozenset[tuple[int, int]] = frozenset(
     }
 )
 
-START = GridWorldState(robot=(1, 3), object=(1, 2), step=0)
+START = GridState(robot=(1, 3), objects=((1, 2),), step=0)
 
 
 def make_population():
     human_1 = [
         lambda o: float(at_terminal(o) and o.state.robot == TARGET),
-        lambda o: float(at_terminal(o) and o.state.object == (0, 3)),
-        lambda o: float(at_terminal(o) and o.state.object == (1, 3)),
-        lambda o: float(at_terminal(o) and o.state.object in {(0, 2), (1, 2), (2, 2)}),
-        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2)}),
-        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2)}),
-        lambda o: float(at_terminal(o) and o.state.object in {(1, 2), (2, 2), (3, 2)}),
-        lambda o: float(at_terminal(o) and o.state.object == (1, 1)),
+        lambda o: float(at_terminal(o) and o.state.objects[0] == (0, 3)),
+        lambda o: float(at_terminal(o) and o.state.objects[0] == (1, 3)),
+        lambda o: float(at_terminal(o) and o.state.objects[0] in {(0, 2), (1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.objects[0] in {(1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.objects[0] in {(1, 2), (2, 2)}),
+        lambda o: float(at_terminal(o) and o.state.objects[0] in {(1, 2), (2, 2), (3, 2)}),
+        lambda o: float(at_terminal(o) and o.state.objects[0] == (1, 1)),
     ]
     return [human_1]
 
@@ -65,13 +66,13 @@ def make_population():
 def main() -> None:
     instance = Instance(
         name="sideeffect",
-        layout=GridWorldLayout(
+        config=GridConfig(
             width=SIZE, height=SIZE, max_steps=MAX_STEPS, walls=WALLS
         ),
         population=make_population(),
         start=START,
     )
-    env = MovingBoxEnv(instance.layout, instance.population)
+    env = MovingBoxEnv(instance.config, instance.population)
     states, actions = solve_and_rollout(env, instance.start)
 
     for i, (state, action) in enumerate(zip(states, actions)):

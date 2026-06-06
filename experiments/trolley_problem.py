@@ -19,21 +19,17 @@ import argparse
 
 from rich import print
 
-from grid_world import (
+from empo import (
     EmpoParameter,
-    GridWorldLayout,
-    GridWorldState,
+    GridConfig,
+    GridState,
     Population,
     RunawayTrainEnv,
+    evaluate_trajectory,
 )
-from grid_world.empo_eval import evaluate_trajectory
+from empo.envs.runaway_train import survival_goal, switch_unpressed_goal
 
-from _common import (
-    Instance,
-    solve_and_rollout,
-    survival_goal,
-    switch_unpressed_goal,
-)
+from _common import Instance, solve_and_rollout
 
 WIDTH = 6
 
@@ -43,7 +39,7 @@ def build_trolley(
     if_unpressed: int,
     survival_goal_mult: int,
     switch_goal_mult: int,
-) -> tuple[GridWorldLayout, Population, GridWorldState]:
+) -> tuple[GridConfig, Population, GridState]:
     height = max(if_pressed, if_unpressed) + 3
 
     switch = (4, height - 2)
@@ -62,7 +58,7 @@ def build_trolley(
     if_unpressed_humans = [(2, y) for y in range(if_unpressed)]
     human_positions = if_pressed_humans + if_unpressed_humans
 
-    layout = GridWorldLayout(
+    config = GridConfig(
         width=WIDTH,
         height=height,
         max_steps=height,
@@ -77,12 +73,12 @@ def build_trolley(
         goals += [switch_unpressed_goal(0)] * switch_goal_mult
         population.append(goals)
 
-    start = GridWorldState(
+    start = GridState(
         robot=(4, height - 1),
-        object=(2, height - 1),
+        objects=((2, height - 1),),
         button_states=tuple([True] * (1 + len(human_positions))),
     )
-    return layout, population, start
+    return config, population, start
 
 
 def main() -> None:
@@ -105,7 +101,7 @@ def main() -> None:
 
     params = EmpoParameter()
 
-    layout, population, start = build_trolley(
+    config, population, start = build_trolley(
         if_pressed=args.if_pressed,
         if_unpressed=args.if_unpressed,
         survival_goal_mult=args.survival_goal_mult,
@@ -114,12 +110,12 @@ def main() -> None:
 
     instance = Instance(
         name="trolley_problem",
-        layout=layout,
+        config=config,
         population=population,
         start=start,
     )
 
-    env = RunawayTrainEnv(instance.layout, instance.population)
+    env = RunawayTrainEnv(instance.config, instance.population)
     states, actions = solve_and_rollout(env, instance.start, params)
 
     end = states[-1]
@@ -128,7 +124,7 @@ def main() -> None:
     n_humans = len(human_alive)
     n_dead = sum(1 for alive in human_alive if not alive)
     dead_buttons = [
-        layout.buttons[i + 1] for i, alive in enumerate(human_alive) if not alive
+        config.buttons[i + 1] for i, alive in enumerate(human_alive) if not alive
     ]
 
     eval_ = evaluate_trajectory(env, params, states, actions)

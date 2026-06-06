@@ -1,8 +1,7 @@
 import numpy as np
 
-from ..base import Action
-from ..empo import EmpoParameter
-from ..env_base import DeterministicGridWorldEnv
+from ..params import EmpoParameter
+from ..core import DeterministicEnv
 
 
 class BackwardInductionSolver:
@@ -13,7 +12,7 @@ class BackwardInductionSolver:
 
     def __init__(
         self,
-        func_env: DeterministicGridWorldEnv,
+        func_env: DeterministicEnv,
         params: EmpoParameter = EmpoParameter(),
     ):
         self.env = func_env
@@ -36,7 +35,7 @@ class BackwardInductionSolver:
             return
 
         # recursively compute successor states
-        actions = list(Action)
+        actions = list(range(self.env.action_space.n))
         for action in actions:
             next_state = self.env.transition(state, action)
             self.solve(next_state)

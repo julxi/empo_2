@@ -1,28 +1,21 @@
 import pytest
 
-import grid_world as env
-from grid_world.solvers import backward_induction as solvino
+import empo as env
+from empo.envs.moving_box import fair_box_population
+from empo.solvers import backward_induction as solvino
 
 
 @pytest.mark.parametrize("size", [5, 7, 9])
 def test_robot_picks_fair_middle_box_column(size: int) -> None:
     max_steps = 2 * size
 
-    human_1 = [
-        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] <= i))
-        for i in range(size)
-    ]
-    human_2 = [
-        (lambda x, i=i: float(x.state.step >= x.layout.max_steps and x.state.object[0] >= i))
-        for i in range(size)
-    ]
-    population = [human_1, human_2]
+    population = fair_box_population(size)
 
     func_env = env.MovingBoxEnv(
-        env.GridWorldLayout(width=size, height=size, max_steps=max_steps, walls=frozenset()),
+        env.GridConfig(width=size, height=size, max_steps=max_steps, walls=frozenset()),
         population,
     )
-    start_state = env.GridWorldState(robot=(0, 0), object=(1, 0), step=0)
+    start_state = env.GridState(robot=(0, 0), objects=((1, 0),), step=0)
 
     params = env.EmpoParameter(
         gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1,
@@ -37,4 +30,4 @@ def test_robot_picks_fair_middle_box_column(size: int) -> None:
         action = solver.robot_policy[current_state]
         current_state = func_env.transition(current_state, action)
 
-    assert current_state.object[0] == (size - 1) // 2
+    assert current_state.objects[0][0] == (size - 1) // 2

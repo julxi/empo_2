@@ -5,13 +5,12 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 
-from grid_world import (
+from empo import (
     BackwardInductionSolver,
-    DeterministicGridWorldEnv,
+    DeterministicEnv,
     EmpoParameter,
-    GridWorldLayout,
-    GridWorldObs,
-    GridWorldState,
+    GridConfig,
+    GridState,
     Population,
     rollout,
     wrap_dict,
@@ -21,60 +20,16 @@ from grid_world import (
 @dataclass
 class Instance:
     name: str
-    layout: GridWorldLayout
+    config: GridConfig
     population: Population
-    start: GridWorldState
-
-
-def at_terminal(obs: GridWorldObs) -> bool:
-    return obs.state.step >= obs.layout.max_steps
-
-
-def make_above_below_goal(row: int, above: bool):
-    """1 iff at the terminal state the object's y-coordinate is on the requested side of ``row``."""
-    if above:
-
-        def g(obs: GridWorldObs) -> float:
-            return float(at_terminal(obs) and obs.state.object[0] <= row)
-
-    else:
-
-        def g(obs: GridWorldObs) -> float:
-            return float(at_terminal(obs) and obs.state.object[0] >= row)
-
-    return g
-
-
-def fair_box_population(rows: int) -> Population:
-    """Two humans with mirrored above/below preferences over rows 0..rows-1."""
-    human_1 = [make_above_below_goal(i, True) for i in range(rows)]
-    human_2 = [make_above_below_goal(i, False) for i in range(rows)]
-    return [human_1, human_2]
-
-
-def survival_goal(human_button_idx: int):
-    """1 iff at the terminal state the button at ``human_button_idx`` is still pressed (True)."""
-
-    def g(obs: GridWorldObs) -> float:
-        return float(at_terminal(obs) and obs.state.button_states[human_button_idx])
-
-    return g
-
-
-def switch_unpressed_goal(switch_button_idx: int = 0):
-    """1 iff at the terminal state the switch button has not been pressed."""
-
-    def g(obs: GridWorldObs) -> float:
-        return float(at_terminal(obs) and obs.state.button_states[switch_button_idx])
-
-    return g
+    start: GridState
 
 
 def solve_and_rollout(
-    env: DeterministicGridWorldEnv,
-    start: GridWorldState,
+    env: DeterministicEnv,
+    start: GridState,
     params: EmpoParameter = EmpoParameter(),
-) -> tuple[list[GridWorldState], list[int]]:
+) -> tuple[list[GridState], list[int]]:
     solver = BackwardInductionSolver(env, params)
     solver.solve(start)
     return rollout(env, wrap_dict(solver.robot_policy), start)

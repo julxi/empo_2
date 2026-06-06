@@ -13,16 +13,15 @@ Useful for two purposes:
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .base import GridWorldState
-from .empo import EmpoParameter
-from .env_base import DeterministicGridWorldEnv
+from ..core import DeterministicEnv, State
+from ..params import EmpoParameter
 
-type Policy = Callable[[GridWorldState], int]
+type Policy = Callable[[State], int]
 
 
 @dataclass(frozen=True)
 class TrajectoryEvaluation:
-    states: list[GridWorldState]
+    states: list[State]
     actions: list[int]
     V_h: list[list[list[float]]]  # [t][h][g_h]
     X_h: list[list[float]]  # [t][h]
@@ -30,18 +29,18 @@ class TrajectoryEvaluation:
     V_r: list[float]  # [t]
 
 
-def wrap_dict(d: dict[GridWorldState, int]) -> Policy:
-    def policy(state: GridWorldState):
+def wrap_dict(d: dict[State, int]) -> Policy:
+    def policy(state: State):
         return d[state]
 
     return policy
 
 
 def rollout(
-    env: DeterministicGridWorldEnv,
+    env: DeterministicEnv,
     policy: Policy,
-    start: GridWorldState,
-) -> tuple[list[GridWorldState], list[int]]:
+    start: State,
+) -> tuple[list[State], list[int]]:
     states = [start]
     actions: list[int] = []
     current = start
@@ -54,9 +53,9 @@ def rollout(
 
 
 def evaluate_trajectory(
-    env: DeterministicGridWorldEnv,
+    env: DeterministicEnv,
     params: EmpoParameter,
-    states: list[GridWorldState],
+    states: list[State],
     actions: list[int],
 ) -> TrajectoryEvaluation:
     assert env.terminal(states[-1]), "trajectory must end in a terminal state"
@@ -96,10 +95,10 @@ def evaluate_trajectory(
 
 
 def evaluate_policy(
-    env: DeterministicGridWorldEnv,
+    env: DeterministicEnv,
     params: EmpoParameter,
     policy: Policy,
-    start: GridWorldState,
+    start: State,
 ) -> TrajectoryEvaluation:
     states, actions = rollout(env, policy, start)
     return evaluate_trajectory(env, params, states, actions)
