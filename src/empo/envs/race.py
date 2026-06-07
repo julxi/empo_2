@@ -1,8 +1,11 @@
-from dataclasses import replace, dataclass
+import itertools
+from dataclasses import dataclass
 from typing import Any
 from enum import Flag, auto
 
-from ..core import DeterministicEnv, at_terminal, Population, EnvConfig, Obs, State
+import numpy as np
+
+from ..core import StochasticEnv, Population, EnvConfig, Obs, State
 
 
 @dataclass(frozen=True)
@@ -22,7 +25,7 @@ class Mode(Flag):
     PULL = auto()
 
 
-class RaceEnv(DeterministicEnv[RaceConfig, RaceState]):
+class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
     def __init__(
         self,
         config: RaceConfig,
@@ -37,6 +40,54 @@ class RaceEnv(DeterministicEnv[RaceConfig, RaceState]):
         self.trip_prob = trip_prob
         self.mode = mode
 
+    def _next_states(
+        self, state: RaceState, action: int
+    ) -> tuple[list[RaceState], list[float]]:
+        next_step = state.step + 1
+
+        assert len(state.progress) == self.config.n_racers
+        assert len(state.race_result) <= self.config.n_racers
+        for racer in state.race_result:
+            assert state.progress[racer] >= self.config.len_track - 1
+
+        # robot push/pull the chosen racer (stacks with that racer's own step)
+        racer_affected = action % self.config.n_racers
+        mode = action // self.config.n_racers
+        effect = -1 if mode == 0 and Mode.PULL in self.mode else +1
+
+        base_progress = list(state.progress)
+        base_progress[racer_affected] += effect
+
+        finish_line = self.config.len_track - 1
+        # racers past the line are deterministic; the rest each trip independently
+        racing = [r for r in range(self.config.n_racers) if r not in state.race_result]
+
+        outcomes: dict[RaceState, float] = {}
+        for tripped in itertools.product((False, True), repeat=len(racing)):
+            prob = 1.0
+            progress = list(base_progress)
+            race_result = list(state.race_result)
+            for racer in state.race_result:  # already past the finish line
+                progress[racer] = self.config.len_track
+            for racer, trip in zip(racing, tripped):
+                prob *= self.trip_prob if trip else 1.0 - self.trip_prob
+                if not trip:  # normal step unless tripped
+                    progress[racer] += 1
+                progress[racer] = max(0, progress[racer])  # no negative progress
+                if progress[racer] >= finish_line:  # stop on the line, record once
+                    progress[racer] = finish_line
+                    race_result.append(racer)
+            if prob == 0.0:
+                continue
+            result = RaceState(
+                step=next_step,
+                progress=tuple(progress),
+                race_result=tuple(race_result),
+            )
+            outcomes[result] = outcomes.get(result, 0.0) + prob
+
+        return list(outcomes.keys()), list(outcomes.values())
+
     def transition(
         self,
         state: RaceState,
@@ -44,43 +95,18 @@ class RaceEnv(DeterministicEnv[RaceConfig, RaceState]):
         rng: Any = None,
         params: Any = None,
     ) -> RaceState:
-        new_step = state.step + 1
+        states, probs = self._next_states(state, action)
+        if len(states) == 1:
+            return states[0]
+        if rng is None:
+            rng = np.random.default_rng()
+        idx = rng.choice(len(states), p=probs)
+        return states[idx]
 
-        assert len(state.progress) == self.config.n_racers
-        assert len(state.race_result) <= self.config.n_racers
-
-        for racer in state.race_result:
-            assert state.progress[racer] >= self.config.len_track - 1
-
-        new_progress = list(state.progress)
-        new_race_result = list(state.race_result)
-
-        # robot push/pull racer
-        racer_affected = action % self.config.n_racers
-        mode = action // self.config.n_racers
-        effect = -1 if mode == 0 and Mode.PULL in self.mode else +1
-        new_progress[racer_affected] += effect
-
-        finish_line = self.config.len_track - 1
-        for racer in range(self.config.n_racers):
-            if racer in state.race_result:  # already past the finish line
-                new_progress[racer] = self.config.len_track
-                continue
-
-            if rng.random() > self.trip_prob:  # normal step unless tripped
-                new_progress[racer] += 1
-
-            new_progress[racer] = max(0, new_progress[racer])  # no negative progress
-
-            if new_progress[racer] >= finish_line:  # stop on the line, record once
-                new_progress[racer] = finish_line
-                new_race_result.append(racer)
-
-        return RaceState(
-            step=new_step,
-            progress=tuple(new_progress),
-            race_result=tuple(new_race_result),
-        )
+    def distribution(
+        self, state: RaceState, action: int
+    ) -> tuple[list[RaceState], list[float]]:
+        return self._next_states(state, action)
 
 
 type RaceObs = Obs[RaceConfig, RaceState]
