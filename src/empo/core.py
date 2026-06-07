@@ -108,6 +108,6 @@ class StochasticEnv[ConfigT: EnvConfig, StateT: State](Env[ConfigT, StateT]):
     """``transition`` samples via ``rng``; ``distribution`` exposes the dynamics."""
 
     def distribution(
-        self, state: State, action: int
-    ) -> tuple[list[State], list[float]]:
+        self, state: StateT, action: int
+    ) -> tuple[list[StateT], list[float]]:
         raise NotImplementedError
