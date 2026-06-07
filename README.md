@@ -41,3 +41,4 @@ More general Gridworld:
 - humans want to do tasks
 - ask for help
 - each time makes them more dependent
+
