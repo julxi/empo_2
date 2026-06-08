@@ -34,7 +34,10 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
         trip_prob: float = 0.5,
     ) -> None:
         n_modes = bin(mode.value).count("1")
-        self.num_actions = n_modes * config.n_racers
+        # Push/pull actions index every (mode, racer) pair; the final action is a
+        # mode-independent noop where the robot leaves every racer alone.
+        self.noop_action = n_modes * config.n_racers
+        self.num_actions = self.noop_action + 1
 
         super().__init__(config, population)
         self.trip_prob = trip_prob
@@ -43,41 +46,47 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
     def _next_states(
         self, state: RaceState, action: int
     ) -> tuple[list[RaceState], list[float]]:
+        n_racers = self.config.n_racers
+        finish_line = self.config.len_track - 1
         next_step = state.step + 1
 
-        assert len(state.progress) == self.config.n_racers
-        assert len(state.race_result) <= self.config.n_racers
+        assert len(state.progress) == n_racers
+        assert len(state.race_result) <= n_racers
         for racer in state.race_result:
-            assert state.progress[racer] >= self.config.len_track - 1
+            assert state.progress[racer] >= finish_line
 
-        # robot push/pull the chosen racer (stacks with that racer's own step)
-        racer_affected = action % self.config.n_racers
-        mode = action // self.config.n_racers
-        effect = -1 if mode == 0 and Mode.PULL in self.mode else +1
-
+        # The robot pushes/pulls one racer (noop touches no one). This nudge stacks
+        # with whatever step that racer then takes on its own below.
         base_progress = list(state.progress)
-        base_progress[racer_affected] += effect
+        if action != self.noop_action:
+            racer_affected = action % n_racers
+            mode = action // n_racers
+            pulling = mode == 0 and Mode.PULL in self.mode
+            base_progress[racer_affected] += -1 if pulling else +1
 
-        finish_line = self.config.len_track - 1
-        # racers past the line are deterministic; the rest each trip independently
-        racing = [r for r in range(self.config.n_racers) if r not in state.race_result]
+        # Racers past the line are frozen; the rest each trip independently, so we
+        # enumerate every trip/no-trip combination and weight it by its probability.
+        racing = [r for r in range(n_racers) if r not in state.race_result]
 
         outcomes: dict[RaceState, float] = {}
         for tripped in itertools.product((False, True), repeat=len(racing)):
             prob = 1.0
             progress = list(base_progress)
             race_result = list(state.race_result)
-            for racer in state.race_result:  # already past the finish line
+
+            for racer in state.race_result:  # finished earlier: park beyond the line
                 progress[racer] = self.config.len_track
+
             for racer, trip in zip(racing, tripped):
                 prob *= self.trip_prob if trip else 1.0 - self.trip_prob
-                if not trip:  # normal step unless tripped
+                if not trip:  # a trip forfeits the normal step
                     progress[racer] += 1
                 progress[racer] = max(0, progress[racer])  # no negative progress
-                if progress[racer] >= finish_line:  # stop on the line, record once
+                if progress[racer] >= finish_line:  # reached the line: stop and record
                     progress[racer] = finish_line
                     race_result.append(racer)
-            if prob == 0.0:
+
+            if prob == 0.0:  # impossible combination when trip_prob is 0 or 1
                 continue
             result = RaceState(
                 step=next_step,

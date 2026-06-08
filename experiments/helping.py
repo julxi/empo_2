@@ -1,12 +1,17 @@
 import empo.envs.race as r
-from empo import Population
+from empo import (
+    Population,
+    StochasticBackwardInductionSolver,
+    EmpoParameter,
+    at_terminal,
+)
 import random
 
-n_racers = 3
-len_track = 5
+n_racers = 2
+len_track = 6
 
-config = r.RaceConfig(n_racers=n_racers, len_track=len_track)
-mode = r.Mode.PUSH | r.Mode.PULL
+config = r.RaceConfig(n_racers=n_racers, len_track=len_track, max_steps=2 * len_track)
+mode = r.Mode.PUSH
 rng = random.Random()
 
 
@@ -17,6 +22,8 @@ def winner_population(n_racers: int) -> Population:
         human = []
         for pos in range(n_racers):
             human.append(r.position_goal(racer, pos))
+        # terminal goal
+        human.append(lambda o: float(at_terminal(o)))
         population.append(human)
 
     return population
@@ -27,52 +34,14 @@ population = winner_population(n_racers)
 
 # pulling into negative
 
-env = r.RaceEnv(config, population, mode, trip_prob=1)
-state = r.RaceState(progress=(0,) * n_racers, race_result=())
-action = 0  # pull racer0
-new_state = env.transition(state, action, rng)
-print("Racer0 stays non-zero", new_state)
+env = r.RaceEnv(config, population, mode, trip_prob=0.5)
+start = r.RaceState(progress=(0, 0), race_result=(), step=0)
+action = env.noop_action
+params = EmpoParameter()
+solver = StochasticBackwardInductionSolver(env, params)
 
-# pushing over finish
-
-env = r.RaceEnv(config, population, mode, trip_prob=0)
-state = r.RaceState(progress=(len_track - 2,) * n_racers, race_result=())
-action = n_racers  # push racer0
-new_state = env.transition(state, action, rng)
-print("Racer0 stops at finish line", new_state)
-
-# goals seem to work
-
-env = r.RaceEnv(config, population, mode, trip_prob=1)
-state = r.RaceState(
-    progress=tuple(
-        [
-            len_track - 1,
-        ]
-        * (n_racers - 1)
-        + [0]
-    ),
-    race_result=tuple(range(n_racers - 1)),
-)
-
-print("Just finished the race gets goals", env.goal_values(state))
-
-new_state = env.transition(state, 0, rng)
-print(new_state)
-
-print("Just finished the race gets goals", env.goal_values(new_state))
+solver.solve(start)
 
 
-env = r.RaceEnv(config, population, mode, trip_prob=1)
-state = r.RaceState(
-    progress=tuple(
-        [
-            len_track,
-        ]
-        * (n_racers - 1)
-        + [0]
-    ),
-    race_result=tuple(range(n_racers - 1)),
-)
-
-print("Already finished the race no goals", env.goal_values(state))
+state = r.RaceState(progress=(0, 0), race_result=(), step=5)
+print(solver.robot_policy[state])
