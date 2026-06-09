@@ -83,8 +83,8 @@ In this case $V_r (s)$ only depends on the terminal state reached by the policy 
 
 === Trolley Problem
 
-The trolley problem captures a classic ethical dilemma: given mutually exclusive
-goals (saving different groups of humans), whose goals should be followed, and
+The trolley problem captures a classic tension: given mutually exclusive
+goals, whose goals should be followed, and
 how is the trade-off shifted by a socially preference for certain behaviours?
 
 #heading(numbering: none, level:4)[Setup]

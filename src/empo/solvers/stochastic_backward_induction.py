@@ -27,12 +27,22 @@ class StochasticBackwardInductionSolver:
         self.U_r: dict = {}
         self.V_r: dict = {}
 
+    def _empowerment(self, state):
+        """Set X_h and U_r for a state from its already-computed V_h."""
+        self.X_h[state] = [
+            sum(v**self.params.zeta for v in human_v) for human_v in self.V_h[state]
+        ]
+        fair_power = sum(x ** (-self.params.xi) for x in self.X_h[state])
+        self.U_r[state] = -(fair_power**self.params.eta)
+
     def solve(self, state):
         if state in self.V_r:
             return
         if self.env.terminal(state):
             self.V_h[state] = self.env.goal_values(state)
-            self.V_r[state] = 0.0
+            self._empowerment(state)
+            self.Q_r[state] = {}  # no actions at a terminal state
+            self.V_r[state] = self.U_r[state]
             return
 
         actions = list(range(self.env.action_space.n))
@@ -78,14 +88,8 @@ class StochasticBackwardInductionSolver:
             v_h_state.append(row)
         self.V_h[state] = v_h_state
 
-        # X_h
-        self.X_h[state] = [
-            sum(v**self.params.zeta for v in human_v) for human_v in self.V_h[state]
-        ]
-
-        # U_r
-        fair_power = sum(x ** (-self.params.xi) for x in self.X_h[state])
-        self.U_r[state] = -(fair_power**self.params.eta)
+        # X_h and U_r
+        self._empowerment(state)
 
         # V_r
         self.V_r[state] = self.U_r[state] + self.Q_r[state][best_action]
