@@ -16,25 +16,16 @@ a regression guard for the terminal-value bug class these tests were written for
 import numpy as np
 import pytest
 
-import empo as env
-from empo.envs.moving_box import fair_box_population
-from empo.envs.trolley_problem import (
-    TrolleyState,
-    agent_was_passive_goal,
-    always_true_goal,
-    survival_goal,
-)
-from empo.envs.interruptibility import (
-    InterrupConfig,
-    InterrupPopConfig,
-    InterrupState,
-    make_interrupEnv,
-)
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+import empo.envs.grid.moving_box as moving_box
+import empo.envs.symbolic.trolley_problem as trolley
+import empo.envs.symbolic.interruptibility as interruptibility
 from empo.solvers import backward_induction as solvino
 from empo.solvers import stochastic_backward_induction as stoch_solvino
 
 # All analytic formulas below assume these Empo parameters.
-PARAMS = env.EmpoParameter(gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1)
+PARAMS = EmpoParameter(gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1)
 
 
 # --- Trolley problem vs BackwardInductionSolver ----------------------------
@@ -44,15 +35,14 @@ def build_trolley(n0: int, n1: int, ms: int, m0: int):
     """Population with ``n0`` humans killed by action 0 (survivors[0]) and
     ``n1`` killed by action 1 (survivors[1]); each carries ``ms`` survival
     goals and ``m0`` passivity goals on top of a constant baseline."""
-    population: env.Population = []
-    for group, count in ((0, n0), (1, n1)):
-        human = (
-            [always_true_goal()]
-            + [survival_goal(group)] * ms
-            + [agent_was_passive_goal()] * m0
+    return trolley.make_env(
+        trolley.PopConfig(
+            n_killed_by_passive=n0,
+            n_killed_by_pressing=n1,
+            m_survival_goals=ms,
+            m_passivity_goals=m0,
         )
-        population.extend([human] * count)
-    return env.TrolleyEnv(population)
+    )
 
 
 def trolley_utilities(n0: int, n1: int, ms: int, m0: int) -> tuple[float, float]:
@@ -74,7 +64,7 @@ def trolley_utilities(n0: int, n1: int, ms: int, m0: int) -> tuple[float, float]
 )
 def test_trolley_matches_analytic(n0, n1, ms, m0, expected_action) -> None:
     func_env = build_trolley(n0, n1, ms, m0)
-    start = TrolleyState()
+    start = trolley.State()
 
     solver = solvino.BackwardInductionSolver(func_env, PARAMS)
     solver.solve(start)
@@ -110,18 +100,18 @@ def test_trolley_matches_analytic(n0, n1, ms, m0, expected_action) -> None:
     ],
 )
 def test_interruptibility_matches_analytic(m_task, m_int, pause_prob) -> None:
-    config = InterrupConfig(pause_prob=pause_prob)
-    pop_config = InterrupPopConfig(
+    config = interruptibility.EnvConfig(pause_prob=pause_prob)
+    pop_config = interruptibility.PopConfig(
         m_task_done_goals=m_task, m_is_interruptible_goals=m_int
     )
-    func_env = make_interrupEnv(config, pop_config)
-    start = InterrupState()
+    func_env = interruptibility.make_env(config, pop_config)
+    start = interruptibility.State()
 
     solver = stoch_solvino.StochasticBackwardInductionSolver(func_env, PARAMS)
     solver.solve(start)
 
     # single human; every action leads straight to a terminal state
-    def u_terminal(state: InterrupState) -> float:
+    def u_terminal(state: interruptibility.State) -> float:
         x = 1 + m_task * state.task_done + m_int * state.is_interruptible
         return -1.0 / x
 
@@ -157,29 +147,29 @@ def _check_invariants(solver, func_env) -> None:
 def test_deterministic_solver_invariants_trolley() -> None:
     func_env = build_trolley(n0=3, n1=1, ms=1, m0=1)
     solver = solvino.BackwardInductionSolver(func_env, PARAMS)
-    solver.solve(TrolleyState())
+    solver.solve(trolley.State())
     _check_invariants(solver, func_env)
 
 
 @pytest.mark.parametrize("size", [5, 7])
 def test_deterministic_solver_invariants_moving_box(size: int) -> None:
-    func_env = env.MovingBoxEnv(
-        env.GridConfig(
+    func_env = moving_box.Env(
+        GridConfig(
             width=size, height=size, max_steps=2 * size, walls=frozenset()
         ),
-        fair_box_population(size),
+        moving_box.fair_box_population(size),
     )
-    start = env.GridState(robot=(0, 0), objects=((1, 0),), step=0)
+    start = GridState(robot=(0, 0), objects=((1, 0),), step=0)
     solver = solvino.BackwardInductionSolver(func_env, PARAMS)
     solver.solve(start)
     _check_invariants(solver, func_env)
 
 
 def test_stochastic_solver_invariants_interruptibility() -> None:
-    func_env = make_interrupEnv(
-        InterrupConfig(pause_prob=0.5),
-        InterrupPopConfig(m_task_done_goals=2, m_is_interruptible_goals=1),
+    func_env = interruptibility.make_env(
+        interruptibility.EnvConfig(pause_prob=0.5),
+        interruptibility.PopConfig(m_task_done_goals=2, m_is_interruptible_goals=1),
     )
     solver = stoch_solvino.StochasticBackwardInductionSolver(func_env, PARAMS)
-    solver.solve(InterrupState())
+    solver.solve(interruptibility.State())
     _check_invariants(solver, func_env)

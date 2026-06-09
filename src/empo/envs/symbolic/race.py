@@ -5,19 +5,26 @@ from enum import Flag, auto
 
 import numpy as np
 
-from ..core import StochasticEnv, Population, EnvConfig, Obs, State
+from ... import core
+from ...core import Population, at_terminal
 
 
 @dataclass(frozen=True)
-class RaceConfig(EnvConfig):
+class EnvConfig(core.EnvConfig):
     n_racers: int = 0
     len_track: int = 0
 
 
 @dataclass(frozen=True)
-class RaceState(State):
+class State(core.State):
     progress: tuple[int, ...] = ()
     race_result: tuple[int, ...] = ()  # order of finish so far
+
+
+@dataclass(frozen=True)
+class RaceAction:
+    offset: int  # +1 push, -1 pull
+    racer: int
 
 
 class Mode(Flag):
@@ -25,17 +32,15 @@ class Mode(Flag):
     PULL = auto()
 
 
-class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
+class Env(core.StochasticEnv[EnvConfig, State]):
     def __init__(
         self,
-        config: RaceConfig,
+        config: EnvConfig,
         population: Population,
         mode: Mode,
         trip_prob: float = 0.5,
     ) -> None:
         n_modes = bin(mode.value).count("1")
-        # Push/pull actions index every (mode, racer) pair; the final action is a
-        # mode-independent noop where the robot leaves every racer alone.
         self.noop_action = n_modes * config.n_racers
         self.num_actions = self.noop_action + 1
 
@@ -43,9 +48,18 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
         self.trip_prob = trip_prob
         self.mode = mode
 
+    def translate_action(self, action: int) -> RaceAction | None:
+        if action == self.noop_action:
+            return None
+        n_racers = self.config.n_racers
+        racer_affected = action % n_racers
+        mode = action // n_racers
+        pulling = mode == 0 and Mode.PULL in self.mode
+        return RaceAction(offset=-1 if pulling else +1, racer=racer_affected)
+
     def _next_states(
-        self, state: RaceState, action: int
-    ) -> tuple[list[RaceState], list[float]]:
+        self, state: State, action: int
+    ) -> tuple[list[State], list[float]]:
         n_racers = self.config.n_racers
         finish_line = self.config.len_track - 1
         next_step = state.step + 1
@@ -58,17 +72,15 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
         # The robot pushes/pulls one racer (noop touches no one). This nudge stacks
         # with whatever step that racer then takes on its own below.
         base_progress = list(state.progress)
-        if action != self.noop_action:
-            racer_affected = action % n_racers
-            mode = action // n_racers
-            pulling = mode == 0 and Mode.PULL in self.mode
-            base_progress[racer_affected] += -1 if pulling else +1
+        act = self.translate_action(action)
+        if act is not None:
+            base_progress[act.racer] += act.offset
 
         # Racers past the line are frozen; the rest each trip independently, so we
         # enumerate every trip/no-trip combination and weight it by its probability.
         racing = [r for r in range(n_racers) if r not in state.race_result]
 
-        outcomes: dict[RaceState, float] = {}
+        outcomes: dict[State, float] = {}
         for tripped in itertools.product((False, True), repeat=len(racing)):
             prob = 1.0
             progress = list(base_progress)
@@ -88,7 +100,7 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
 
             if prob == 0.0:  # impossible combination when trip_prob is 0 or 1
                 continue
-            result = RaceState(
+            result = State(
                 step=next_step,
                 progress=tuple(progress),
                 race_result=tuple(race_result),
@@ -99,11 +111,11 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
 
     def transition(
         self,
-        state: RaceState,
+        state: State,
         action: int,
         rng: Any = None,
         params: Any = None,
-    ) -> RaceState:
+    ) -> State:
         states, probs = self._next_states(state, action)
         if len(states) == 1:
             return states[0]
@@ -113,20 +125,70 @@ class RaceEnv(StochasticEnv[RaceConfig, RaceState]):
         return states[idx]
 
     def distribution(
-        self, state: RaceState, action: int
-    ) -> tuple[list[RaceState], list[float]]:
+        self, state: State, action: int
+    ) -> tuple[list[State], list[float]]:
         return self._next_states(state, action)
 
 
-type RaceObs = Obs[RaceConfig, RaceState]
+Obs = core.Obs[EnvConfig, State]
 
 
 def position_goal(h_idx: int, pos: int):
     """1 iff human is at least pos."""
 
-    def g(obs: RaceObs) -> float:
+    def g(obs: Obs) -> float:
         if obs.state.progress[h_idx] == obs.config.len_track - 1:  # just finished
             return 1.0 if h_idx in obs.state.race_result[: pos + 1] else 0.0
         return 0.0  # not finished yet, or already past the line
 
     return g
+
+
+def position_goal_at_step(h_idx: int, pos: int, step: int):
+    """1 iff human is at least pos."""
+
+    def g(obs: Obs) -> float:
+        if obs.state.progress[h_idx] == obs.config.len_track - 1:  # just finished
+            return 1.0 if h_idx in obs.state.race_result[: pos + 1] else 0.0
+        return 0.0  # not finished yet, or already past the line
+
+    return g
+
+
+def terminal_goal():
+    """1 iff at a terminal state (used as a baseline 'finish the race' goal)."""
+
+    def g(obs: Obs) -> float:
+        return float(at_terminal(obs))
+
+    return g
+
+
+@dataclass(frozen=True)
+class PopConfig:
+    m_position_goals: int = 1  # copies of each per-place goal a racer holds
+    include_terminal_goal: bool = True
+
+
+def make_population(config: EnvConfig, pop_config: PopConfig) -> Population:
+    """One human per racer, each wanting to finish in every place (and, by
+    default, for the race to terminate)."""
+    population: Population = []
+    for racer in range(config.n_racers):
+        human = []
+        for pos in range(config.n_racers):
+            human.extend([position_goal(racer, pos)] * pop_config.m_position_goals)
+        if pop_config.include_terminal_goal:
+            human.append(terminal_goal())
+        population.append(human)
+    return population
+
+
+def make_env(
+    config: EnvConfig,
+    pop_config: PopConfig,
+    mode: Mode,
+    trip_prob: float = 0.5,
+) -> Env:
+    population = make_population(config, pop_config)
+    return Env(config, population, mode, trip_prob=trip_prob)

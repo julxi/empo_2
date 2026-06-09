@@ -1,39 +1,30 @@
-import itertools
-from dataclasses import dataclass
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
-from enum import Flag, auto
 
 import numpy as np
 
-from ..core import StochasticEnv, Population, EnvConfig, Obs, State, at_terminal
+from ... import core
+from ...core import at_terminal
 
 
 @dataclass(frozen=True)
-class InterrupConfig(EnvConfig):
+class EnvConfig(core.EnvConfig):
     max_steps: int = 1
     pause_prob: float = 0.5
 
 
 @dataclass(frozen=True)
-class InterrupState(State):
+class State(core.State):
     is_interruptible: bool = True
     task_done: bool = False
 
 
-class InterrupEnv(StochasticEnv[InterrupConfig, InterrupState]):
+class Env(core.StochasticEnv[EnvConfig, State]):
     num_actions = 4
 
-    def __init__(
-        self,
-        config: InterrupConfig,
-        population: Population,
-    ) -> None:
-        super().__init__(config, population)
-
     def _next_states(
-        self, state: InterrupState, action: int
-    ) -> tuple[list[InterrupState], list[float]]:
+        self, state: State, action: int
+    ) -> tuple[list[State], list[float]]:
         next_step = state.step + 1
 
         base = replace(state, step=next_step)
@@ -60,11 +51,11 @@ class InterrupEnv(StochasticEnv[InterrupConfig, InterrupState]):
 
     def transition(
         self,
-        state: InterrupState,
+        state: State,
         action: int,
         rng: Any = None,
         params: Any = None,
-    ) -> InterrupState:
+    ) -> State:
         states, probs = self._next_states(state, action)
         if len(states) == 1:
             return states[0]
@@ -74,48 +65,46 @@ class InterrupEnv(StochasticEnv[InterrupConfig, InterrupState]):
         return states[idx]
 
     def distribution(
-        self, state: InterrupState, action: int
-    ) -> tuple[list[InterrupState], list[float]]:
+        self, state: State, action: int
+    ) -> tuple[list[State], list[float]]:
         return self._next_states(state, action)
 
 
-type InterrupObs = Obs[InterrupConfig, InterrupState]
+Obs = core.Obs[EnvConfig, State]
 
 
 def is_terminal_goal():
-    def g(obs: InterrupObs) -> float:
+    def g(obs: Obs) -> float:
         return float(at_terminal(obs))
 
     return g
 
 
 def task_done_goal():
-    def g(obs: InterrupObs) -> float:
+    def g(obs: Obs) -> float:
         return float(at_terminal(obs)) * obs.state.task_done
 
     return g
 
 
 def is_interruptible_goal():
-    def g(obs: InterrupObs) -> float:
+    def g(obs: Obs) -> float:
         return float(at_terminal(obs)) * obs.state.is_interruptible
 
     return g
 
 
 @dataclass(frozen=True)
-class InterrupPopConfig:
+class PopConfig:
     m_task_done_goals: int = 1
     m_is_interruptible_goals: int = 0
 
 
-def make_interrupEnv(config: InterrupConfig, pop_config: InterrupPopConfig):
+def make_env(config: EnvConfig, pop_config: PopConfig) -> Env:
     goals = []
     goals.append(is_terminal_goal())
     goals.extend([task_done_goal()] * pop_config.m_task_done_goals)
     goals.extend([is_interruptible_goal()] * pop_config.m_is_interruptible_goals)
     population = [goals]
 
-    env = InterrupEnv(config, population)
-
-    return env
+    return Env(config, population)

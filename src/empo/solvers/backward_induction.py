@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..params import EmpoParameter
+from .params import EmpoParameter
 from ..core import DeterministicEnv
 
 

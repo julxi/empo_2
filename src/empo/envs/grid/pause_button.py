@@ -9,11 +9,17 @@ from typing import Any
 import numpy as np
 from rich import print
 
-from ..core import Population, StochasticEnv, at_terminal
-from ..grid import DELTAS, Action, GridConfig, GridObs, GridState, invalid_pos
+from ...core import Population, StochasticEnv, at_terminal
+from .base import DELTAS, Action, GridConfig, GridObs, GridState, invalid_pos
+
+# Grid envs share the grid flavours of config/state/obs; re-export under the
+# uniform per-env names so callers can use ``pause_button.EnvConfig`` etc.
+EnvConfig = GridConfig
+State = GridState
+Obs = GridObs
 
 
-class PauseButtonEnv(StochasticEnv[GridConfig, GridState]):
+class Env(StochasticEnv[GridConfig, GridState]):
     PAUSE_BUTTON = 0  # true -> robot can't move
     SWITCH_PAUSE_BUTTON = 1  # true -> pause button deactivated
 

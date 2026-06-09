@@ -19,15 +19,11 @@ import argparse
 
 from rich import print
 
-from empo import (
-    EmpoParameter,
-    GridConfig,
-    GridState,
-    Population,
-    RunawayTrainEnv,
-    evaluate_trajectory,
-)
-from empo.envs.runaway_train import survival_goal, switch_unpressed_goal
+from empo.core import Population
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+from empo.solvers.trajectory import evaluate_trajectory
+import empo.envs.grid.runaway_train as runaway_train
 
 from _common import Instance, solve_and_rollout
 
@@ -69,8 +65,8 @@ def build_trolley(
     population: Population = []
     for h_idx in range(1, len(human_positions) + 1):
         goals = [lambda o: 1.0]
-        goals += [survival_goal(h_idx)] * survival_goal_mult
-        goals += [switch_unpressed_goal(0)] * switch_goal_mult
+        goals += [runaway_train.survival_goal(h_idx)] * survival_goal_mult
+        goals += [runaway_train.switch_unpressed_goal(0)] * switch_goal_mult
         population.append(goals)
 
     start = GridState(
@@ -115,7 +111,7 @@ def main() -> None:
         start=start,
     )
 
-    env = RunawayTrainEnv(instance.config, instance.population)
+    env = runaway_train.Env(instance.config, instance.population)
     states, actions = solve_and_rollout(env, instance.start, params)
 
     end = states[-1]

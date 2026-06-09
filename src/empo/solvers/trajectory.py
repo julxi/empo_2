@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..core import DeterministicEnv, State
-from ..params import EmpoParameter
+from .params import EmpoParameter
 
 type Policy = Callable[[State], int]
 

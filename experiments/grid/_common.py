@@ -5,16 +5,11 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 
-from empo import (
-    BackwardInductionSolver,
-    DeterministicEnv,
-    EmpoParameter,
-    GridConfig,
-    GridState,
-    Population,
-    rollout,
-    wrap_dict,
-)
+from empo.core import DeterministicEnv, Population
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+from empo.solvers.backward_induction import BackwardInductionSolver
+from empo.solvers.trajectory import rollout, wrap_dict
 
 
 @dataclass

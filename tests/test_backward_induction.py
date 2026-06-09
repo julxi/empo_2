@@ -1,7 +1,8 @@
 import pytest
 
-import empo as env
-from empo.envs.moving_box import fair_box_population
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+import empo.envs.grid.moving_box as moving_box
 from empo.solvers import backward_induction as solvino
 
 
@@ -9,15 +10,15 @@ from empo.solvers import backward_induction as solvino
 def test_robot_picks_fair_middle_box_column(size: int) -> None:
     max_steps = 2 * size
 
-    population = fair_box_population(size)
+    population = moving_box.fair_box_population(size)
 
-    func_env = env.MovingBoxEnv(
-        env.GridConfig(width=size, height=size, max_steps=max_steps, walls=frozenset()),
+    func_env = moving_box.Env(
+        GridConfig(width=size, height=size, max_steps=max_steps, walls=frozenset()),
         population,
     )
-    start_state = env.GridState(robot=(0, 0), objects=((1, 0),), step=0)
+    start_state = GridState(robot=(0, 0), objects=((1, 0),), step=0)
 
-    params = env.EmpoParameter(
+    params = EmpoParameter(
         gamma_r=1, beta_r=1, gamma_h=1, zeta=2, xi=1, eta=1,
     )
     solver = solvino.BackwardInductionSolver(func_env, params)

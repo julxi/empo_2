@@ -3,11 +3,17 @@
 from dataclasses import replace
 from typing import Any
 
-from ..core import DeterministicEnv, at_terminal
-from ..grid import DELTAS, Action, GridConfig, GridObs, GridState, invalid_pos
+from ...core import DeterministicEnv, at_terminal
+from .base import DELTAS, Action, GridConfig, GridObs, GridState, invalid_pos
+
+# Grid envs share the grid flavours of config/state/obs; re-export under the
+# uniform per-env names so callers can use ``runaway_train.EnvConfig`` etc.
+EnvConfig = GridConfig
+State = GridState
+Obs = GridObs
 
 
-class RunawayTrainEnv(DeterministicEnv[GridConfig, GridState]):
+class Env(DeterministicEnv[GridConfig, GridState]):
     BUTTON_SWITCH = 0
     num_actions = 4
 

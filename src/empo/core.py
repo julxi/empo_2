@@ -1,12 +1,4 @@
-"""General environment primitives and base classes.
-
-These types know nothing about grids. An environment is described by a
-:class:`State` (whose only guaranteed field is the step clock), an
-:class:`EnvConfig` (carrying ``max_steps``), and observations are the pair
-:class:`Obs` of ``(config, state)`` handed to each goal. The :class:`Env`
-base classes define the functional environment API on top of these. Grid-specific
-primitives (positions, walls, movement) live in :mod:`empo.grid`.
-"""
+"""General environment primitives and base classes."""
 
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -16,22 +8,17 @@ from gymnasium.experimental.functional import FuncEnv
 
 
 @dataclass(frozen=True)
-class State:
-    """Dynamic environment state. Subclasses add domain-specific fields.
+class EnvConfig:
+    """Static environment description."""
 
-    Frozen (and therefore hashable) so solvers can use states as dict keys.
-    Every field must have a default so subclasses can add their own defaulted
-    fields without dataclass field-ordering errors.
-    """
-
-    step: int = 0
+    max_steps: int = 0
 
 
 @dataclass(frozen=True)
-class EnvConfig:
-    """Static environment description. Subclasses add domain-specific fields."""
+class State:
+    """Dynamic environment state."""
 
-    max_steps: int = 0
+    step: int = 0
 
 
 @dataclass(frozen=True)
@@ -43,7 +30,7 @@ class Obs[ConfigT: EnvConfig, StateT: State]:
 type Goal[ObsT] = Callable[[ObsT], float]
 type Human[ObsT] = list[Goal[ObsT]]
 type Population[ObsT] = list[Human[ObsT]]
-type Rewards = list[list[float]]
+type GoalValues = list[list[float]]
 
 
 def at_terminal(obs: Obs) -> bool:
@@ -51,7 +38,7 @@ def at_terminal(obs: Obs) -> bool:
 
 
 class Env[ConfigT: EnvConfig, StateT: State](
-    FuncEnv[StateT, Obs, int, Rewards, bool, None, None]
+    FuncEnv[StateT, Obs, int, GoalValues, bool, None, None]
 ):
     num_actions: int  # set by each concrete env
 
@@ -80,7 +67,7 @@ class Env[ConfigT: EnvConfig, StateT: State](
     ) -> Obs[ConfigT, StateT]:
         return Obs(config=self.config, state=state)
 
-    def goal_values(self, state: StateT) -> Rewards:
+    def goal_values(self, state: StateT) -> GoalValues:
         obs = self.observation(state)
         return [[goal(obs) for goal in human_goals] for human_goals in self.population]
 

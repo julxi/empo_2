@@ -1,7 +1,7 @@
 """Tests for the race environment.
 
 Each test pins down behaviour of a bug that was fixed in
-:mod:`empo.envs.race` — negative progress, recording a push over the finish
+:mod:`empo.envs.symbolic.race` — negative progress, recording a push over the finish
 line, the step clock, the just-finished assertion, duplicate finishes, and the
 ``position_goal`` indexing — plus the push/pull movement semantics and the
 stochastic ``distribution``.
@@ -12,22 +12,22 @@ no rng is needed; the ``distribution`` tests cover the genuinely stochastic case
 
 import pytest
 
-import empo.envs.race as r
+import empo.envs.symbolic.race as r
 
 N_RACERS = 3
 LEN_TRACK = 5
 FINISH_LINE = LEN_TRACK - 1
 
 
-def make_env(mode: r.Mode, trip_prob: float) -> r.RaceEnv:
-    config = r.RaceConfig(n_racers=N_RACERS, len_track=LEN_TRACK)
+def make_env(mode: r.Mode, trip_prob: float) -> r.Env:
+    config = r.EnvConfig(n_racers=N_RACERS, len_track=LEN_TRACK)
     population: r.Population = []  # population is irrelevant to the dynamics
-    return r.RaceEnv(config, population, mode, trip_prob=trip_prob)
+    return r.Env(config, population, mode, trip_prob=trip_prob)
 
 
-def obs_for(progress: tuple[int, ...], race_result: tuple[int, ...]) -> r.RaceObs:
-    config = r.RaceConfig(n_racers=N_RACERS, len_track=LEN_TRACK)
-    state = r.RaceState(progress=progress, race_result=race_result)
+def obs_for(progress: tuple[int, ...], race_result: tuple[int, ...]) -> r.Obs:
+    config = r.EnvConfig(n_racers=N_RACERS, len_track=LEN_TRACK)
+    state = r.State(progress=progress, race_result=race_result)
     return r.Obs(config=config, state=state)
 
 
@@ -45,7 +45,7 @@ def push(racer: int) -> int:
 
 def test_pull_does_not_go_negative() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=1)  # nobody steps
-    state = r.RaceState(progress=(0,) * N_RACERS, race_result=())
+    state = r.State(progress=(0,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, pull(0))
 
@@ -58,7 +58,7 @@ def test_pull_does_not_go_negative() -> None:
 
 def test_push_onto_finish_is_recorded() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0)  # everyone steps
-    state = r.RaceState(progress=(LEN_TRACK - 2,) * N_RACERS, race_result=())
+    state = r.State(progress=(LEN_TRACK - 2,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, push(0))
 
@@ -69,7 +69,7 @@ def test_push_onto_finish_is_recorded() -> None:
 
 def test_finisher_stops_on_the_line_not_beyond() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0)
-    state = r.RaceState(progress=(LEN_TRACK - 2,) * N_RACERS, race_result=())
+    state = r.State(progress=(LEN_TRACK - 2,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, push(0))
 
@@ -83,7 +83,7 @@ def test_finisher_stops_on_the_line_not_beyond() -> None:
 
 def test_step_is_incremented() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=1)
-    state = r.RaceState(step=3, progress=(0,) * N_RACERS, race_result=())
+    state = r.State(step=3, progress=(0,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, push(0))
 
@@ -97,7 +97,7 @@ def test_just_finished_state_is_accepted_as_input() -> None:
     """A finisher sits on ``len_track - 1`` while in ``race_result``; feeding
     that state back into ``transition`` must not trip the assertion."""
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=1)
-    just_finished = r.RaceState(
+    just_finished = r.State(
         progress=(FINISH_LINE, 1, 1), race_result=(0,)
     )
 
@@ -112,7 +112,7 @@ def test_just_finished_state_is_accepted_as_input() -> None:
 
 def test_no_duplicate_finish_when_pulled_back() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0)
-    just_finished = r.RaceState(
+    just_finished = r.State(
         progress=(FINISH_LINE, 1, 1), race_result=(0,)
     )
 
@@ -126,7 +126,7 @@ def test_no_duplicate_finish_when_pulled_back() -> None:
 
 def test_push_advances_by_two_without_trip() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0)  # always steps
-    state = r.RaceState(progress=(0,) * N_RACERS, race_result=())
+    state = r.State(progress=(0,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, push(0))
 
@@ -136,7 +136,7 @@ def test_push_advances_by_two_without_trip() -> None:
 
 def test_push_advances_by_one_with_trip() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=1)  # never steps
-    state = r.RaceState(progress=(0,) * N_RACERS, race_result=())
+    state = r.State(progress=(0,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, push(0))
 
@@ -146,7 +146,7 @@ def test_push_advances_by_one_with_trip() -> None:
 
 def test_pull_nets_zero_without_trip() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0)
-    state = r.RaceState(progress=(2,) * N_RACERS, race_result=())
+    state = r.State(progress=(2,) * N_RACERS, race_result=())
 
     new_state = env.transition(state, pull(0))
 
@@ -196,7 +196,7 @@ def test_position_goal_zero_before_finishing() -> None:
 
 def test_distribution_sums_to_one() -> None:
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0.5)
-    state = r.RaceState(progress=(0, 1, 2), race_result=())
+    state = r.State(progress=(0, 1, 2), race_result=())
 
     states, probs = env.distribution(state, push(0))
 
@@ -208,7 +208,7 @@ def test_distribution_sums_to_one() -> None:
 def test_distribution_two_outcomes_for_a_single_racer() -> None:
     # racers 1 and 2 have finished; only racer 0 is still racing -> trip or step
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0.3)
-    state = r.RaceState(progress=(1, FINISH_LINE, FINISH_LINE), race_result=(1, 2))
+    state = r.State(progress=(1, FINISH_LINE, FINISH_LINE), race_result=(1, 2))
 
     states, probs = env.distribution(state, pull(0))
 
@@ -221,7 +221,7 @@ def test_distribution_two_outcomes_for_a_single_racer() -> None:
 def test_distribution_collapses_when_outcome_is_certain() -> None:
     # racer 0 is pushed onto the line; tripping or stepping yields the same state
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0.5)
-    state = r.RaceState(progress=(FINISH_LINE - 1, FINISH_LINE, FINISH_LINE), race_result=(1, 2))
+    state = r.State(progress=(FINISH_LINE - 1, FINISH_LINE, FINISH_LINE), race_result=(1, 2))
 
     states, probs = env.distribution(state, push(0))
 
@@ -235,7 +235,7 @@ def test_transition_samples_from_distribution() -> None:
     import numpy as np
 
     env = make_env(r.Mode.PUSH | r.Mode.PULL, trip_prob=0.5)
-    state = r.RaceState(progress=(0, 1, 2), race_result=())
+    state = r.State(progress=(0, 1, 2), race_result=())
 
     valid = set(env.distribution(state, push(0))[0])
     rng = np.random.default_rng(0)

@@ -14,7 +14,7 @@ from enum import IntEnum
 
 import numpy as np
 
-from .core import EnvConfig, Obs, State
+from ...core import EnvConfig, Obs, State
 
 
 class Action(IntEnum):

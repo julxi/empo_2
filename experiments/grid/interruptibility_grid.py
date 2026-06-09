@@ -27,15 +27,10 @@ from rich import print
 
 import numpy as np
 
-from empo import (
-    EmpoParameter,
-    GridConfig,
-    GridState,
-    PauseButtonEnv,
-    Population,
-    StochasticEnv,
-)
-from empo.envs.pause_button import reach_position_goal, switch_unused_goal
+from empo.core import Population, StochasticEnv
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+import empo.envs.grid.pause_button as pause_button
 from empo.solvers.stochastic_backward_induction import (
     StochasticBackwardInductionSolver,
 )
@@ -76,8 +71,8 @@ def rollout_stochastic(
 
 def build_population(reach_goal_mult: int, switch_unused_mult: int) -> Population:
     goals = [lambda o: 1.0]
-    goals += [reach_position_goal(GOAL)] * reach_goal_mult
-    goals += [switch_unused_goal(SWITCH_IDX)] * switch_unused_mult
+    goals += [pause_button.reach_position_goal(GOAL)] * reach_goal_mult
+    goals += [pause_button.switch_unused_goal(SWITCH_IDX)] * switch_unused_mult
     return [goals]
 
 
@@ -113,7 +108,7 @@ def main() -> None:
 
     params = EmpoParameter()
 
-    env = PauseButtonEnv(
+    env = pause_button.Env(
         instance.config, instance.population, pause_prob=args.pause_prob
     )
     solver = StochasticBackwardInductionSolver(env, params)

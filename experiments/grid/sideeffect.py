@@ -20,12 +20,9 @@ from __future__ import annotations
 
 from rich import print
 
-from empo import (
-    GridConfig,
-    GridState,
-    MovingBoxEnv,
-    at_terminal,
-)
+from empo.core import at_terminal
+from empo.envs.grid.base import GridConfig, GridState
+import empo.envs.grid.moving_box as moving_box
 
 from _common import Instance, solve_and_rollout
 
@@ -72,7 +69,7 @@ def main() -> None:
         population=make_population(),
         start=START,
     )
-    env = MovingBoxEnv(instance.config, instance.population)
+    env = moving_box.Env(instance.config, instance.population)
     states, actions = solve_and_rollout(env, instance.start)
 
     for i, (state, action) in enumerate(zip(states, actions)):

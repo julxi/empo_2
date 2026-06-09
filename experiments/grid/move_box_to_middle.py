@@ -4,13 +4,9 @@ import argparse
 
 from rich import print
 
-from empo import (
-    EmpoParameter,
-    GridConfig,
-    GridState,
-    MovingBoxEnv,
-)
-from empo.envs.moving_box import fair_box_population
+from empo.solvers.params import EmpoParameter
+from empo.envs.grid.base import GridConfig, GridState
+import empo.envs.grid.moving_box as moving_box
 
 from _common import Instance, solve_and_rollout
 
@@ -32,11 +28,11 @@ def main() -> None:
             walls=frozenset(),
             buttons=(),
         ),
-        population=fair_box_population(args.size),
+        population=moving_box.fair_box_population(args.size),
         start=GridState(robot=(0, 0), objects=((1, 0),)),
     )
 
-    env = MovingBoxEnv(instance.config, instance.population)
+    env = moving_box.Env(instance.config, instance.population)
     states, _actions = solve_and_rollout(env, instance.start, params)
     print(states[-1])
 
