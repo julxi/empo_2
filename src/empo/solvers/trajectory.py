@@ -82,11 +82,12 @@ def evaluate_trajectory(
         for t in range(N + 1)
     ]
 
-    U_r: list[float] = [0.0] * (N + 1)
+    U_r: list[float] = [
+        -(sum(x ** (-params.xi) for x in X_h[t]) ** params.eta) for t in range(N + 1)
+    ]
     V_r: list[float] = [0.0] * (N + 1)
+    V_r[N] = U_r[N]  # terminal: no future actions, so V_r = U_r
     for t in range(N - 1, -1, -1):
-        fair_power = sum(x ** (-params.xi) for x in X_h[t])
-        U_r[t] = -(fair_power**params.eta)
         V_r[t] = U_r[t] + params.gamma_r * V_r[t + 1]
 
     return TrajectoryEvaluation(
