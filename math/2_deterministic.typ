@@ -138,8 +138,8 @@ Now the robot will just take whichever action results in a higher $U_r$.
 
 We consider two versions of the trolley problem:
 
-- version 1: $n_p = 1, n_u = 3, m_s = 1, m_w = 0$.
-- version 2: $n_p = 1, n_u = 3, m_s = 1, m_w = 1$.
+- version 1: $n_0 = 1, n_1 = 3, m_s = 1, m_0 = 0$.
+- version 2: $n_0 = 1, n_1 = 3, m_s = 1, m_0 = 1$.
 
 (I think of them as two different types, the first one is maybe best expressed that there is no human preference for the robot action, the second one, there is a preference)
 
