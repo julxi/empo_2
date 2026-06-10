@@ -175,4 +175,4 @@ This can be read as "given $m_s$ and $m_0$ how has the ration $n_1 / n_0$ be so 
 We can also consider @eq-action-condition for the limit case $m_s -> oo$, which means there is some value for $m_s$ that lets the robot take action. The condition is
 $ n_0 1/(1+m_0) > n_1 $
 or equivalently
-$ m_0 < n_0/n_1 - 1 $
+$ m_0 + 1 < n_0/n_1 $
